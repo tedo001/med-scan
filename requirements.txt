@@ -1,0 +1,22 @@
+# MEDSCAN - full install (desktop app + deep engine).
+#
+#     pip install -r requirements.txt
+#
+# Desktop UI and the built-in analyser - required.
+PyQt6>=6.5
+numpy>=1.24
+scipy>=1.10
+opencv-python-headless>=4.8
+Pillow>=10.0
+# DICOM loading and de-identification.
+pydicom>=2.4
+
+# Deep engine (hybrid mode): DenseNet-121 trained on 8 public chest X-ray datasets, plus
+# Grad-CAM. Pulls torch (~800 MB CPU build) and downloads the weights (~30 MB) on first
+# use. Remove these two lines to run fully offline on the built-in measurement engine -
+# the app detects what is installed (Engines page) and the header pill says which runs.
+torch>=2.1
+torchxrayvision>=1.2
+
+# Tests.
+pytest>=7.4

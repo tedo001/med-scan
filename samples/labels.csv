@@ -1,0 +1,26 @@
+file,labels,quality,sex,age,site,view
+cxr_01_normal.png,No Finding,ok,M,54,Coimbatore MC,PA
+cxr_02_normal.png,No Finding,ok,M,30,Madurai RH,PA
+cxr_03_normal.png,No Finding,ok,F,44,Chennai GH,PA
+cxr_04_normal.png,No Finding,ok,M,51,Coimbatore MC,PA
+cxr_05_normal.png,No Finding,ok,M,39,Madurai RH,PA
+cxr_06_normal.png,No Finding,ok,M,35,Chennai GH,PA
+cxr_07_cardiomegaly.png,Cardiomegaly,ok,F,56,Coimbatore MC,PA
+cxr_08_cardiomegaly.png,Cardiomegaly,ok,F,30,Madurai RH,PA
+cxr_09_cardiomegaly.png,Cardiomegaly,ok,M,64,Chennai GH,PA
+cxr_10_effusion.png,Effusion,ok,F,48,Coimbatore MC,PA
+cxr_11_effusion.png,Effusion,ok,F,68,Madurai RH,PA
+cxr_12_effusion.png,Effusion;Cardiomegaly,ok,M,40,Chennai GH,PA
+cxr_13_consolidation.png,Consolidation,ok,F,19,Coimbatore MC,PA
+cxr_14_consolidation.png,Consolidation,ok,M,76,Madurai RH,PA
+cxr_15_consolidation.png,Consolidation,ok,M,60,Chennai GH,PA
+cxr_16_pneumothorax.png,Pneumothorax,ok,M,64,Coimbatore MC,PA
+cxr_17_pneumothorax.png,Pneumothorax,ok,M,44,Madurai RH,PA
+cxr_18_nodule.png,Nodule,ok,F,60,Chennai GH,PA
+cxr_19_nodule.png,Nodule,ok,M,66,Coimbatore MC,PA
+cxr_20_nodule.png,Nodule,ok,F,51,Madurai RH,PA
+cxr_21_mass.png,Mass,ok,F,23,Chennai GH,PA
+cxr_22_quality.png,No Finding,blur,F,75,Coimbatore MC,PA
+cxr_23_quality.png,No Finding,cutoff,F,73,Madurai RH,PA
+cxr_24_quality.png,No Finding,overexposed,F,69,Chennai GH,PA
+cxr_25_effusion_dicom.dcm,Effusion,ok,F,56,Chennai GH,PA

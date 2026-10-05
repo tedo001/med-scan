@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" width="16" height="16">
+  <!-- The tick inside a ticked box. White, because every skin fills a checked
+       indicator with its accent colour and white is what reads on all of them. -->
+  <path d="M3.5 8.4 L6.6 11.5 L12.5 4.8" fill="none" stroke="#ffffff"
+        stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
