@@ -33,7 +33,7 @@ from typing import Dict, List, Optional
 import numpy as np
 
 from . import anatomy as anatomy_mod
-from . import bias, explain, imaging, learner as learner_mod, quality as quality_mod, recommend, \
+from . import bias, deephead, explain, imaging, learner as learner_mod, quality as quality_mod, recommend, \
     router, screening, specialists, uncertainty
 from .findings import NEGATIVE, POSITIVE, POSSIBLE, UNCERTAIN, Finding
 from .imaging import Scan
@@ -42,6 +42,7 @@ __all__ = ["Stage", "Analysis", "AnalysisEngine", "STAGES", "ENGINES"]
 
 STAGES = ("Preprocess", "Quality", "Screen", "Route", "Specialists", "Confidence", "Explain",
           "Record")
+_GROUP_OF = {label: group for group, labels in screening.GROUP_LABELS.items() for label in labels}
 ENGINES = {"hybrid": "Hybrid - DenseNet-121 + measurements", "builtin": "Built-in measurements"}
 
 
@@ -155,7 +156,8 @@ class AnalysisEngine:
                  narrator: Optional[explain.LLMNarrator] = None,
                  positive_at: float = uncertainty.POSITIVE_AT,
                  subgroup_thresholds: Optional[Dict[str, float]] = None,
-                 learner: Optional[learner_mod.Learner] = None):
+                 learner: Optional[learner_mod.Learner] = None,
+                 head=None):
         self.engine_name = engine
         self.tta = tta
         self.temperatures = temperatures or {}
@@ -164,6 +166,7 @@ class AnalysisEngine:
         self.positive_at = positive_at
         self.subgroup_thresholds = subgroup_thresholds or {}
         self.learner = learner
+        self.head = head                   # msx.deephead.DatasetHead trained on your dataset
         self.measure_screen = screening.MeasurementScreen()
 
     @property
@@ -257,10 +260,25 @@ class AnalysisEngine:
             deep_labels = deep_result.labels
             groups = {g: round(specialists.fuse(result.groups[g], deep_result.groups[g]), 4)
                       for g in screening.GROUPS}
+        head_probs: Dict[str, float] = {}
+        head_note = ""
+        if deep is not None and self.head is not None and self.head.ready:
+            probs, in_distribution, distance = self.head.predict(deep.embed(work))
+            calls += 1
+            head_note = (f"dataset model: {', '.join(f'{k} {v:.2f}' for k, v in probs.items())}"
+                         if in_distribution else
+                         f"dataset model abstained: image unlike its training data (distance {distance})")
+            if in_distribution:
+                head_probs = probs
+                for label, p in probs.items():
+                    group = _GROUP_OF.get(label)
+                    if group:
+                        groups[group] = round(deephead.fuse_head(groups[group], p), 4)
         analysis.screen = {"groups": groups, "measured": result.groups, "deep": deep_labels,
-                           "features": result.features}
+                           "features": result.features, "head": head_probs, "head_note": head_note}
         stages.append(Stage("Screen", (clock() - t) * 1000, "ok",
-                            ", ".join(f"{g} {p:.2f}" for g, p in groups.items())))
+                            ", ".join(f"{g} {p:.2f}" for g, p in groups.items())
+                            + (f"; {head_note}" if head_note else "")))
 
         # 4. route
         t = clock()
@@ -300,6 +318,14 @@ class AnalysisEngine:
                 module = specialists.MODULES[group]()
                 produced = module.run(ctx)
                 calls += 1 + len(augmented)
+                for label, p in head_probs.items():          # strongest matching finding only
+                    matching = [f for f in produced if f.label == label]
+                    if matching:
+                        best = max(matching, key=lambda f: f.probability)
+                        best.sources["dataset model"] = round(p, 4)
+                        best.probability = round(deephead.fuse_head(best.probability, p), 4)
+                        best.evidence.append(f"Dataset model {p:.2f} (trained on "
+                                             f"{self.head.info.get('n', 0)} labelled images)")
                 for finding in produced:
                     self._learned(finding, quality.score, scan.view)
                     uncertainty.score(finding, warnings, self.temperatures, positive_at)

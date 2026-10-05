@@ -204,6 +204,14 @@ class DeepScreen:
         return {label: float(np.clip(value, 0, 1))
                 for label, value in zip(self.model.pathologies, output) if label}
 
+    def embed(self, work: np.ndarray) -> np.ndarray:
+        """The 1024 learned image features (before the classifier) - for the dataset model."""
+        with self.torch.no_grad():
+            features = self.model.features(self._tensor(work))
+            pooled = self.torch.nn.functional.adaptive_avg_pool2d(
+                self.torch.nn.functional.relu(features), (1, 1)).flatten(1)
+        return pooled[0].numpy().astype(np.float64)
+
     def predict_batch(self, images: List[np.ndarray]) -> List[Dict[str, float]]:
         batch = self.torch.cat([self._tensor(image) for image in images])
         with self.torch.no_grad():
