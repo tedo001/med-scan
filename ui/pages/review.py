@@ -26,10 +26,11 @@ from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor
 from PyQt6.QtWidgets import (QAbstractItemView, QCheckBox, QComboBox, QFrame, QGridLayout,
                              QHBoxLayout, QHeaderView, QInputDialog, QLineEdit, QMenu,
+                             QPlainTextEdit,
                              QMessageBox, QScrollArea, QSizePolicy, QSlider, QSplitter,
                              QTableWidget, QTableWidgetItem, QVBoxLayout, QWidget)
 
-from msx import explain
+from msx import explain, recommend, report, support
 from msx.datastore import LABELS, OPEN, SECOND_READ, SIGNED
 from msx.findings import NEGATIVE, POSITIVE, POSSIBLE, UNCERTAIN, Finding
 
@@ -50,9 +51,11 @@ class FindingCard(QFrame):
     asked = pyqtSignal(str)
     selected = pyqtSignal(str)
 
-    def __init__(self, finding: Finding, decision: Optional[Dict[str, object]], locked: bool):
+    def __init__(self, finding: Finding, decision: Optional[Dict[str, object]], locked: bool,
+                 mode: Optional[support.SupportMode] = None, agreement: str = ""):
         super().__init__()
         self.finding = finding
+        mode = mode or support.get("")
         self.setObjectName("FindingCard")
         self.setProperty("status", finding.status)
         self.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -65,21 +68,36 @@ class FindingCard(QFrame):
                     ProbBar(finding.probability, 130),
                     Pill(f"{finding.confidence_level} confidence {finding.confidence:.2f}", conf_tone))
         col.addLayout(head)
+        if agreement:
+            col.addLayout(hbox(Pill("Agrees with your first read" if agreement == "agree" else
+                                    "Differs from your first read - worth a second look",
+                                    "ok" if agreement == "agree" else "warn"), None))
+        compact = (mode.key == "concise") or (mode.disagreements_only and agreement == "agree")
         meta = f"{finding.module} module"
         if finding.zones:
             meta += " · " + ", ".join(finding.zones) + " zone"
         meta += " · " + " · ".join(f"{k} {v:.2f}" for k, v in finding.sources.items())
         col.addWidget(label(meta, "MonoSmall"))
-        for line in finding.evidence:
+        for line in (finding.evidence[:1] if compact else finding.evidence):
             col.addWidget(label(f"• {line}", "Body", wrap=True))
+        why = explain.SIGNIFICANCE.get(finding.label)
+        if why and mode.significance and not compact:
+            box = label(f"<b>Why it may matter:</b> {why[0]}<br><b>Urgency:</b> {why[1]} · "
+                        f"<b>If missed:</b> {why[2]}", "Evidence", wrap=True)
+            box.setTextFormat(Qt.TextFormat.RichText)
+            col.addWidget(box)
+        if mode.checklist and finding.label in explain.CHECKLIST:
+            col.addWidget(label("HOW TO READ THIS", "SectionLabel"))
+            for step_number, step in enumerate(explain.CHECKLIST[finding.label], 1):
+                col.addWidget(label(f"{step_number}. {step}", "Small", wrap=True))
         u = finding.uncertainty
-        if u:
+        if u and not compact:
             col.addWidget(label(
                 f"confidence = decisiveness {u.get('decisiveness', 0):.2f} · stability "
                 f"{u.get('stability', 0):.2f} (TTA σ {u.get('std', 0):.3f}, n={u.get('n', 1)}) · "
                 f"agreement {u.get('agreement', 1):.2f} · quality {u.get('quality', 1):.2f}",
                 "MonoSmall", wrap=True))
-        if finding.limitations:
+        if finding.limitations and not compact:
             lim = label("Limitations: " + " · ".join(finding.limitations), "Small", wrap=True)
             lim.setStyleSheet(f"color: {theme.G[500]};")
             col.addWidget(lim)
@@ -142,6 +160,7 @@ class ReviewPage(QWidget):
         self.opened_at = time.monotonic()
         self.selected_key = ""
         self.depth_override: Optional[str] = None
+        self._report_for = ""
 
         outer = QHBoxLayout(self)
         outer.setContentsMargins(16, 14, 16, 0)
@@ -271,6 +290,22 @@ class ReviewPage(QWidget):
         self.pills.setSpacing(6)
         self.case.addLayout(hbox(vbox(self.ref, self.meta, spacing=2), None, self.pills))
 
+        # how MEDSCAN helps this doctor - their choice, switchable per case
+        mode_card = QFrame()
+        mode_card.setObjectName("InfoPanel")
+        mode_row = QHBoxLayout(mode_card)
+        mode_row.setContentsMargins(14, 8, 14, 8)
+        mode_row.addWidget(label("SUPPORT MODE", "SectionLabel"))
+        self.mode_switch = Segmented([m.name for m in support.MODES.values()])
+        self.mode_switch.changed.connect(self._mode_changed)
+        mode_row.addWidget(self.mode_switch)
+        self.mode_note = label("", "Small", wrap=True)
+        mode_row.addWidget(self.mode_note, 1)
+        self.mode_default = button("Make this my default", "Link", self._mode_default)
+        mode_row.addWidget(self.mode_default)
+        self.case.addWidget(mode_card)
+        self.mode = support.get("")
+
         # viewer + side panels
         view_card = Card("Scan", "", padding=10)
         toggles = QHBoxLayout()
@@ -321,6 +356,17 @@ class ReviewPage(QWidget):
         self.case.addWidget(self.headline)
         self.findings_card = Card("AI findings", "")
         self.case.addWidget(self.findings_card)
+        self.rec_card = Card("Recommended next steps", "recommendation engine · you decide")
+        self.case.addWidget(self.rec_card)
+        self.report_card = Card("Draft report", "generative AI · edit before signing",
+                                right=button("Regenerate", "", lambda: self._report(force=True)))
+        self.report_edit = QPlainTextEdit()
+        self.report_edit.setMinimumHeight(260)
+        self.report_edit.setStyleSheet(f"font-family: {theme.MONO}; font-size: 12px;")
+        self.report_note = label("", "Faint", wrap=True)
+        self.report_card.body.addWidget(self.report_edit)
+        self.report_card.body.addWidget(self.report_note)
+        self.case.addWidget(self.report_card)
         self.explain_card = Card("Explanation", "")
         self.depth = Segmented(["Brief", "Standard", "Detailed"])
         self.depth.changed.connect(self._depth_changed)
@@ -382,6 +428,9 @@ class ReviewPage(QWidget):
         self.opened_at = time.monotonic()
         self.selected_key = ""
         self.depth_override = None
+        user = self.services.user
+        self.mode = support.get(getattr(user, "support_mode", "") if user else "")
+        self._report_for = ""
         self.services.log("study opened", study=study_id)
         self._render()
 
@@ -391,8 +440,9 @@ class ReviewPage(QWidget):
 
     @property
     def blinded(self) -> bool:
-        return bool(self.services.settings.get("blinded_first_read")) and not self.row.get(
-            "first_read") and not self.locked and self.analysis.status != "quality-hold"
+        wanted = bool(self.services.settings.get("blinded_first_read")) or self.mode.blind_first
+        return wanted and not self.row.get("first_read") and not self.locked and \
+            self.analysis.status != "quality-hold"
 
     def _render(self) -> None:
         a, row = self.analysis, self.row
@@ -418,6 +468,12 @@ class ReviewPage(QWidget):
                                    "second-read": "Second read requested"}[state],
                                   "ok" if state == SIGNED else "info"))
 
+        self.mode_switch.blockSignals(True)
+        self.mode_switch.set(self.mode.name)
+        self.mode_switch.blockSignals(False)
+        default = getattr(self.services.user, "support_mode", "")
+        self.mode_note.setText(self.mode.summary + ("" if self.mode.key != default else "  (your default)"))
+        self.mode_default.setVisible(self.mode.key != default)
         self.viewer.set_scan(a.work, a.heat, a.lung_mask)
         self.viewer.blind = self.blinded
         self._overlays()
@@ -426,6 +482,8 @@ class ReviewPage(QWidget):
         self._stages()
         self._first_read()
         self._findings()
+        self._recommendations()
+        self._report()
         self._explanation()
         self._questions()
         for b in (self.sign, self.second, self.add_button):
@@ -577,7 +635,13 @@ class ReviewPage(QWidget):
         self.findings_card.set_caption(f"{len(shown)} shown · {len(a.findings) - len(shown)} "
                                        "checked and not found")
         for f in shown:
-            card = FindingCard(f, latest.get(f.key), self.locked)
+            agreement = ""
+            first = self.row.get("first_read")
+            if first is not None and (self.mode.disagreements_only or self.mode.blind_first or
+                                      self.services.settings.get("blinded_first_read")):
+                called = set(first.split(";")) - {"No Finding", ""}
+                agreement = "agree" if (f.label in called) == (f.status == POSITIVE) else "disagree"
+            card = FindingCard(f, latest.get(f.key), self.locked, self.mode, agreement)
             card.decided.connect(self._decide)
             card.asked.connect(self._focus_question)
             card.selected.connect(self._select)
@@ -667,9 +731,10 @@ class ReviewPage(QWidget):
             return
         if self.depth_override:
             e = explain.build(a.findings, a.quality, a.routing, a.context, self.depth_override,
-                              self.services.kb, auto_escalate=False)
+                              self.services.kb, auto_escalate=False, mode=self.mode.key)
         else:
-            e = a.explanation
+            e = explain.build(a.findings, a.quality, a.routing, a.context, self.mode.depth,
+                              self.services.kb, mode=self.mode.key)
         self.depth.set(e.get("depth", "standard").capitalize())
         note = f"depth: {e.get('depth')}"
         if e.get("escalated"):
@@ -686,6 +751,14 @@ class ReviewPage(QWidget):
                 lim = label(f"! {line}", "Small", wrap=True)
                 lim.setStyleSheet("color: #B45309;")
                 self.explain_body.addWidget(lim)
+            if section.get("why") and e.get("depth") != "brief":
+                why = section["why"]
+                box = label(f"<b>Why it may matter:</b> {why['significance']} <b>Urgency:</b> "
+                            f"{why['urgency']}.", "Small", wrap=True)
+                box.setTextFormat(Qt.TextFormat.RichText)
+                self.explain_body.addWidget(box)
+            for n_, step in enumerate(section.get("checklist", []), 1):
+                self.explain_body.addWidget(label(f"☐ {n_}. {step}", "Small", wrap=True))
             if section.get("action") and e.get("depth") != "brief":
                 act = label(f"→ {section['action']}", "Small", wrap=True)
                 act.setStyleSheet(f"color: {theme.NAVY}; font-weight: 600;")
@@ -695,6 +768,60 @@ class ReviewPage(QWidget):
                                                   wrap=True, selectable=True))
             if section.get("cite"):
                 self.explain_body.addWidget(label(f"— {section['cite']}", "Faint", wrap=True))
+
+    # ------------------------------------------------- mode / recs / report -----
+    def _mode_changed(self, name: str) -> None:
+        self.mode = next(m for m in support.MODES.values() if m.name == name)
+        self.depth_override = None
+        self.services.log("support mode changed", {"mode": self.mode.key}, self.study_id)
+        if self.analysis is not None:
+            self._render()
+
+    def _mode_default(self) -> None:
+        user = self.services.user
+        if user is None:
+            return
+        self.services.accounts.set_support_mode(user.username, self.mode.key)
+        user.support_mode = self.mode.key
+        self.services.log("default support mode set", {"mode": self.mode.key}, category="system")
+        self._render()
+
+    def _recommendations(self) -> None:
+        clear(self.rec_card.body)
+        self.rec_card.setVisible(not self.blinded)
+        recs = self.analysis.recommendations or [r.to_dict() for r in recommend.recommend(
+            self.analysis.findings, self.analysis.context, self.analysis.quality)]
+        if not recs:
+            self.rec_card.body.addWidget(label("No action suggested by the AI.", "Small"))
+        tone = {"Now": "fail", "Same day": "warn", "Within 1 week": "info", "Routine": "grey"}
+        for r in recs:
+            pill = Pill(r["tier"], tone.get(r["tier"], "grey"))
+            pill.setFixedWidth(96)
+            self.rec_card.body.addLayout(hbox(pill, vbox(
+                label(r["action"], "Body", wrap=True),
+                label(f"{r['reason']} · {r['source']}", "Faint", wrap=True), spacing=0), spacing=10))
+
+    def _report(self, force: bool = False) -> None:
+        self.report_card.setVisible(not self.blinded)
+        if self.blinded:
+            return
+        if self.locked and self.row.get("report"):
+            self.report_edit.setPlainText(self.row["report"])
+            self.report_edit.setReadOnly(True)
+            self.report_note.setText(f"Signed report - {self.row.get('signed_by')}")
+            return
+        self.report_edit.setReadOnly(False)
+        if self._report_for == self.study_id and not force:
+            return
+        recs = [recommend.Recommendation(**r) for r in self.analysis.recommendations] or None
+        drafted = report.draft(self.analysis, recs, self.services.narrator)
+        self.report_edit.setPlainText(drafted["text"])
+        self.report_note.setText(f"written by: {drafted['engine']}" +
+                                 (f" · {drafted['note']}" if drafted["note"] else "") +
+                                 " · every sentence is grounded in the findings above")
+        self._report_for = self.study_id
+        if force:
+            self.services.log("report regenerated", {"engine": drafted["engine"]}, self.study_id)
 
     # ----------------------------------------------------------- Q & A ------
     def _focus_question(self, key: str) -> None:
@@ -751,15 +878,16 @@ class ReviewPage(QWidget):
                 return
         final = self.services.store.final_labels(self.study_id, self.analysis)
         elapsed = (time.monotonic() - self.opened_at) * 1000
-        report = (f"Final read: {', '.join(final) or 'No significant abnormality'}. "
-                  f"AI suggestion: {self.analysis.explanation.get('headline', '')}")
+        report_text = self.report_edit.toPlainText().strip() or (
+            f"Final read: {', '.join(final) or 'No significant abnormality'}.")
         user = self.services.user
-        self.services.store.sign_off(self.study_id, user.username, final, elapsed, report)
+        self.services.store.sign_off(self.study_id, user.username, final, elapsed, report_text)
         self.services.log("report signed", {"final": final or ["No Finding"],
                                             "seconds": round(elapsed / 1000, 1),
                                             "ai_positive": [f.title for f in self.analysis.findings
                                                             if f.status == POSITIVE]},
                           self.study_id)
         self.row = self.services.store.study(self.study_id)
+        self.services.retrain()
         self.services.studies_changed.emit()
         self._render()

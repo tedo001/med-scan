@@ -16,6 +16,7 @@ DEFAULTS: Dict[str, Any] = {
     "positive_at": 0.5,
     "temperatures": {},               # group -> temperature (from Evaluation > Calibrate)
     "route_overrides": {},            # context -> {"route": x, "exit": y}
+    "subgroup_thresholds": {},        # "sex:F" -> threshold, from Evaluation > Reduce bias
     "blinded_first_read": True,       # ask the doctor's impression before showing the AI
     "llm_enabled": False,
     "llm_url": "http://localhost:11434",

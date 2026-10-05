@@ -224,7 +224,7 @@ class Page(QWidget):
         self.body.setContentsMargins(0, 0, 0, 16)
         self.body.setSpacing(12)
         if scroll:
-            area = QScrollArea()
+            area = self.scroll = QScrollArea()
             area.setObjectName("PageScroll")
             area.setWidgetResizable(True)
             area.setWidget(body)
@@ -642,4 +642,225 @@ class XrayViewer(QWidget):
         p.setFont(QFont("JetBrains Mono", 8))
         p.drawText(QRectF(8, self.height() - 20, 300, 16), Qt.AlignmentFlag.AlignLeft,
                    f"zoom {self.zoom:.1f}x - wheel to zoom, drag to pan, double-click to reset")
+        p.end()
+
+
+# ------------------------------------------------------- trend + radar (sentra) ----
+def _smooth_path(points: List[QPointF]) -> QPainterPath:
+    """Catmull-Rom through the points, as cubic Beziers - the soft trend line."""
+    path = QPainterPath()
+    if not points:
+        return path
+    path.moveTo(points[0])
+    for i in range(len(points) - 1):
+        p0 = points[i - 1] if i > 0 else points[i]
+        p1, p2 = points[i], points[i + 1]
+        p3 = points[i + 2] if i + 2 < len(points) else p2
+        c1 = QPointF(p1.x() + (p2.x() - p0.x()) / 6, p1.y() + (p2.y() - p0.y()) / 6)
+        c2 = QPointF(p2.x() - (p3.x() - p1.x()) / 6, p2.y() - (p3.y() - p1.y()) / 6)
+        path.cubicTo(c1, c2, p2)
+    return path
+
+
+class TrendChart(Chart):
+    """Smooth lines (or grouped bars) over time, a dashed average, a second axis.
+
+    series: [(name, values, colour, style, axis)] - style "solid" / "dash" /
+    "dot"; axis "left" / "right".
+    """
+
+    def __init__(self, height: int = 300):
+        super().__init__(height)
+        self.categories: List[str] = []
+        self.series: List[Tuple[str, List[float], str, str, str]] = []
+        self.mode = "line"
+        self.average: Optional[float] = None
+        self.left_title, self.right_title, self.caption = "", "", ""
+
+    def set(self, categories, series, average=None, left_title="", right_title="", caption=""):
+        self.categories, self.series = list(categories), list(series)
+        self.average, self.left_title, self.right_title = average, left_title, right_title
+        self.caption = caption
+        self.update()
+
+    def set_mode(self, mode: str) -> None:
+        self.mode = mode
+        self.update()
+
+    @staticmethod
+    def _nice(peak: float) -> float:
+        if peak <= 0:
+            return 1.0
+        for step in (1, 2, 4, 5, 10, 15, 20, 25, 50, 100, 200, 500, 1000):
+            if peak <= step:
+                return float(step)
+        return float(peak)
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if not self.categories or not any(any(v) for _, v, *_ in self.series):
+            self._empty(p)
+            return
+        left, right, top, bottom = 46, 46 if any(s[4] == "right" for s in self.series) else 14, 34, 34
+        w, h = self.width() - left - right, self.height() - top - bottom
+        peaks = {"left": 0.0, "right": 0.0}
+        for _, values, _, _, axis in self.series:
+            peaks[axis] = max(peaks[axis], max(values) if values else 0)
+        peaks = {k: self._nice(v * 1.1) for k, v in peaks.items()}
+        mono = self._font(8, mono=True)
+        p.setFont(self._font(8, mono=True))
+        p.setPen(QColor(G[400]))
+        p.drawText(QRectF(left, 4, w, 16), Qt.AlignmentFlag.AlignLeft, self.caption)
+        # legend, right-aligned
+        x = self.width() - right
+        for name, _, colour, style, _ in reversed(self.series):
+            width = p.fontMetrics().horizontalAdvance(name) + 26
+            x -= width
+            pen = QPen(QColor(colour), 2, {"solid": Qt.PenStyle.SolidLine, "dash": Qt.PenStyle.DashLine,
+                                          "dot": Qt.PenStyle.DotLine}[style])
+            p.setPen(pen)
+            p.drawLine(QPointF(x, 12), QPointF(x + 14, 12))
+            p.setPen(QColor(G[500]))
+            p.drawText(QPointF(x + 18, 16), name)
+        # grid and axes
+        for k in range(5):
+            y = top + h * (1 - k / 4)
+            p.setPen(QPen(QColor(G[100]), 1))
+            p.drawLine(QPointF(left, y), QPointF(left + w, y))
+            p.setPen(QColor(G[400]))
+            p.setFont(mono)
+            p.drawText(QRectF(0, y - 8, left - 8, 16), Qt.AlignmentFlag.AlignRight |
+                       Qt.AlignmentFlag.AlignVCenter, f"{peaks['left'] * k / 4:g}")
+            if right > 20:
+                p.drawText(QRectF(left + w + 8, y - 8, right - 8, 16), Qt.AlignmentFlag.AlignLeft |
+                           Qt.AlignmentFlag.AlignVCenter, f"{peaks['right'] * k / 4:g}")
+        p.save()
+        p.translate(12, top + h / 2)
+        p.rotate(-90)
+        p.setFont(self._font(8))
+        p.drawText(QRectF(-60, -8, 120, 16), Qt.AlignmentFlag.AlignCenter, self.left_title)
+        p.restore()
+        if self.right_title and right > 20:
+            p.save()
+            p.translate(self.width() - 8, top + h / 2)
+            p.rotate(90)
+            p.setFont(self._font(8))
+            p.drawText(QRectF(-60, -8, 120, 16), Qt.AlignmentFlag.AlignCenter, self.right_title)
+            p.restore()
+        n = len(self.categories)
+        step = w / max(1, n - 1) if self.mode == "line" else w / n
+        xs = [left + (i * step if self.mode == "line" else (i + 0.5) * step) for i in range(n)]
+        p.setFont(mono)
+        p.setPen(QColor(G[500]))
+        every = max(1, n // 12)
+        for i, (xx, cat) in enumerate(zip(xs, self.categories)):
+            if i % every == 0 or i == n - 1:
+                p.drawText(QRectF(xx - 30, top + h + 6, 60, 14), Qt.AlignmentFlag.AlignCenter, cat)
+        if self.average is not None and peaks["left"]:
+            y = top + h * (1 - self.average / peaks["left"])
+            p.setPen(QPen(QColor("#E0A030"), 1.2, Qt.PenStyle.DashLine))
+            p.drawLine(QPointF(left, y), QPointF(left + w, y))
+            p.setPen(QColor("#CD881A"))
+            p.setFont(self._font(7))
+            p.drawText(QPointF(left + w - 44, y - 4), "Average")
+        if self.mode == "bar":
+            groups = [s for s in self.series if s[4] == "left"]
+            bar = step * 0.7 / max(1, len(groups))
+            for gi, (name, values, colour, _, axis) in enumerate(groups):
+                for i, v in enumerate(values):
+                    bh = h * v / peaks[axis]
+                    p.setPen(Qt.PenStyle.NoPen)
+                    p.setBrush(QColor(colour))
+                    p.drawRect(QRectF(xs[i] - step * 0.35 + gi * bar, top + h - bh, bar - 1, bh))
+        for name, values, colour, style, axis in self.series:
+            if self.mode == "bar" and axis == "left":
+                continue
+            pts = [QPointF(xs[i], top + h * (1 - v / peaks[axis])) for i, v in enumerate(values)]
+            pen = QPen(QColor(colour), 2.2 if style == "solid" else 1.6,
+                       {"solid": Qt.PenStyle.SolidLine, "dash": Qt.PenStyle.DashLine,
+                        "dot": Qt.PenStyle.DotLine}[style])
+            p.setPen(pen)
+            p.setBrush(Qt.BrushStyle.NoBrush)
+            p.drawPath(_smooth_path(pts))
+            if style != "dot":
+                p.setBrush(QColor(colour))
+                p.setPen(Qt.PenStyle.NoPen)
+                for pt in pts:
+                    p.drawEllipse(pt, 2.6, 2.6)
+        p.end()
+
+
+class RadarChart(Chart):
+    """A spider chart: categories around a circle, filled series polygons."""
+
+    def __init__(self, height: int = 300):
+        super().__init__(height)
+        self.categories: List[str] = []
+        self.series: List[Tuple[str, List[float], str, str]] = []   # name, values, colour, style
+        self.caption = ""
+
+    def set(self, categories, series, caption=""):
+        self.categories, self.series, self.caption = list(categories), list(series), caption
+        self.update()
+
+    def paintEvent(self, event):
+        p = QPainter(self)
+        p.setRenderHint(QPainter.RenderHint.Antialiasing)
+        if not self.categories or not any(any(v) for _, v, *_ in self.series):
+            self._empty(p)
+            return
+        import math as _m
+
+        p.setFont(self._font(8, mono=True))
+        p.setPen(QColor(G[400]))
+        p.drawText(QRectF(8, 4, self.width() - 16, 16), Qt.AlignmentFlag.AlignLeft, self.caption)
+        cx, cy = self.width() / 2, (self.height() - 24) / 2 + 14
+        radius = min(self.width() / 2 - 90, (self.height() - 70) / 2)
+        n = len(self.categories)
+        peak = max(max(v) for _, v, *_ in self.series) or 1
+        peak = TrendChart._nice(peak)
+
+        def point(i, value):
+            angle = -_m.pi / 2 + 2 * _m.pi * i / n
+            r = radius * value / peak
+            return QPointF(cx + r * _m.cos(angle), cy + r * _m.sin(angle))
+
+        p.setPen(QPen(QColor(G[200]), 1))
+        p.setBrush(Qt.BrushStyle.NoBrush)
+        for ring in range(1, 5):
+            p.drawPolygon(QPolygonF([point(i, peak * ring / 4) for i in range(n)]))
+        for i in range(n):
+            p.drawLine(QPointF(cx, cy), point(i, peak))
+        p.setPen(QColor(G[400]))
+        p.setFont(self._font(7, mono=True))
+        for ring in (2, 4):
+            pt = point(0, peak * ring / 4)
+            p.drawText(QPointF(pt.x() + 3, pt.y() + 10), f"{peak * ring / 4:g}")
+        p.setFont(self._font(9))
+        p.setPen(QColor(G[600]))
+        for i, name in enumerate(self.categories):
+            pt = point(i, peak * 1.16)
+            width = p.fontMetrics().horizontalAdvance(name)
+            p.drawText(QRectF(pt.x() - width / 2 - 4, pt.y() - 8, width + 8, 16),
+                       Qt.AlignmentFlag.AlignCenter, name)
+        for name, values, colour, style in self.series:
+            poly = QPolygonF([point(i, v) for i, v in enumerate(values)])
+            fill = QColor(colour)
+            fill.setAlpha(60 if style != "dot" else 25)
+            p.setBrush(fill)
+            p.setPen(QPen(QColor(colour), 1.8, Qt.PenStyle.DashLine if style == "dash" else
+                          Qt.PenStyle.SolidLine))
+            p.drawPolygon(poly)
+            p.setBrush(QColor(colour))
+            for pt in poly:
+                p.drawEllipse(pt, 2.4, 2.4)
+        x = 10
+        p.setFont(self._font(8))
+        for name, _, colour, style in self.series:
+            p.setPen(QPen(QColor(colour), 2, Qt.PenStyle.DashLine if style == "dash" else Qt.PenStyle.SolidLine))
+            p.drawLine(QPointF(x, self.height() - 10), QPointF(x + 12, self.height() - 10))
+            p.setPen(QColor(G[500]))
+            p.drawText(QPointF(x + 16, self.height() - 6), name)
+            x += p.fontMetrics().horizontalAdvance(name) + 34
         p.end()

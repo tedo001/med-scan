@@ -55,8 +55,9 @@ class SettingsPage(Page):
         review.body.addWidget(self.credentials)
         self.body.addWidget(review)
 
-        llm = Card("LLM narrator (optional)", "rewrites grounded text; output is fact-checked")
-        self.llm = QCheckBox("Use a local LLM through Ollama")
+        llm = Card("Generative AI", "drafts reports and narrates explanations; every output is fact-checked")
+        self.llm = QCheckBox("Use a local LLM through Ollama (e.g. ollama pull gemma2) - otherwise the "
+                             "grounded template writes the draft")
         self.llm_url = QLineEdit()
         self.llm_model = QLineEdit()
         self.llm_state = label("", "MonoSmall")

@@ -28,7 +28,9 @@ python medscan.py                   # sign in: doctor / medscan   or   admin / t
 * `python medscan.py --screenshots docs` renders every screen without a display.
 * `MEDSCAN_SMOKE=1 python medscan.py` builds every page with demo data, then exits.
 * `python -m msx.evaluation samples` benchmarks fixed vs adaptive routing.
-* `python -m pytest tests` runs 32 tests.
+* `python tools/fetch_real_samples.py` downloads a small real chest X-ray check set (public COVID-19
+  Image Data Collection) for `python -m msx.evaluation ~/.medscan/real_samples --engine hybrid`.
+* `python -m pytest tests` runs 40 tests.
 
 On **Analyse**:
 1. Press **Load demo samples**, then **Analyse**. The samples are 25 synthetic
@@ -39,6 +41,11 @@ On **Analyse**:
 
 | Brief requirement | Where in MEDSCAN |
 |---|---|
+| **Adjust help to each doctor, without assuming ability** | **Doctor-chosen support modes** (Guided / Concise / Second opinion / Evidence-first), saved on the doctor's own account and switchable per case. They are never inferred from title or seniority |
+| **ML + DL + Generative AI** deliverable | **ML:** feedback-trained logistic stacker learning from doctors' decisions. **DL:** DenseNet-121 classifier and PSPNet lung/heart segmenter. **Generative AI:** fact-checked draft radiology report |
+| **Recommendation system** | Next-step engine: urgency tier, next test, follow-up, cross-finding patterns, confidence-aware |
+| **Doctor + AI vs either alone (simulation)** | Simulated readers (3 skills × 3 trust styles) with automation-bias and rescue-rate measures |
+| **Reduce bias** | Per-subgroup thresholds that close sensitivity gaps (before / after shown) |
 | Identify and highlight abnormalities | 4 specialist modules (Cardiac, Pleural, Parenchyma, Nodule) plus a DenseNet-121. The viewer shows the heatmap, finding regions, lung outline and CTR measurement lines |
 | Adapt explanation to the clinical situation | Context (Emergency / Routine OPD / Screening camp / Teaching) sets the router thresholds and the explanation depth. Depth **escalates automatically** when the AI is unsure |
 | Confidence and limitations for every finding | Probability, plus a confidence built from decisiveness, test-time-augmentation stability, model–measurement agreement and scan quality, plus finding-specific limitations and mimics |
@@ -76,6 +83,8 @@ One sign-in; the account decides the workspace.
 | ![Sign in](docs/01-signin.png) | ![Analyse](docs/03-analyse.png) |
 | ![Evidence](docs/05-review-evidence.png) | ![Blinded first read](docs/04b-review-blinded.png) |
 | ![Dashboard](docs/06-dashboard.png) | ![Evaluation](docs/07-evaluation.png) |
+| ![Guided mode](docs/05b-review-guided.png) | ![Report](docs/05c-review-report.png) |
+| ![Simulation](docs/07b-simulation.png) | ![Bias and learning](docs/07c-bias-learning.png) |
 | ![Bias](docs/08-bias.png) | ![Audit](docs/09-audit.png) |
 
 ## Tech stack
@@ -106,7 +115,12 @@ msx/                  the analyser engine
   specialists.py      Cardiac / Pleural / Parenchyma / Nodule modules, fusion, TTA
   measures.py         zone opacity, pneumothorax lucency, LoG blob search
   uncertainty.py      confidence, abstention, temperature scaling
-  explain.py          adaptive explanation, Q&A, guarded LLM narrator
+  explain.py          adaptive explanation, why-it-matters, checklists, Q&A, guarded LLM narrator
+  support.py          doctor-chosen support modes
+  recommend.py        recommendation engine
+  report.py           generative draft report (fact-checked)
+  learner.py          feedback-trained ML model
+  simulation.py       Doctor + AI reader simulation
   knowledge.py        BM25 retrieval over knowledge/kb.json
   pipeline.py         the 8-stage AnalysisEngine
   datastore.py        SQLite store: studies, decisions, first/final reads

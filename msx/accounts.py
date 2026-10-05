@@ -52,6 +52,7 @@ class Account:
     failed: int = 0
     locked_until: float = 0.0
     last_login: str = ""
+    support_mode: str = "concise"     # chosen by the doctor - see msx.support
 
     @property
     def initials(self) -> str:
@@ -105,6 +106,11 @@ class Accounts:
         if save:
             self._save()
         return account
+
+    def set_support_mode(self, username: str, mode: str) -> None:
+        """The doctor's own choice of how MEDSCAN helps them; never set from their title."""
+        self._accounts[username].support_mode = mode
+        self._save()
 
     def remove(self, username: str) -> None:
         if username in self._accounts:

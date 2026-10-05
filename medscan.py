@@ -69,10 +69,18 @@ def run_signed_in(application) -> int:
             return 0
 
 
-def seed_demo(services, decide: bool = True) -> None:
-    """Analyse the demo phantoms into ``services`` and, optionally, review a few."""
+def seed_demo(services, decide: bool = True, passes: int = 1, spread_days: int = 0) -> None:
+    """Analyse the demo phantoms into ``services`` and, optionally, review some.
+
+    ``passes`` analyses the set under several clinical contexts; ``spread_days``
+    re-dates the studies across that many past days so the dashboard trend has a
+    timeline. Demo data only - the dates and the simulated reviews are labelled
+    as such in the README.
+    """
     import csv
     import glob
+    import random
+    from datetime import datetime, timedelta
 
     from msx import imaging, paths
 
@@ -82,22 +90,30 @@ def seed_demo(services, decide: bool = True) -> None:
             labels[row["file"]] = row
     contexts = ("Routine OPD", "Emergency", "Screening camp")
     engine = services.engine
-    for index, path in enumerate(sorted(glob.glob(os.path.join(paths.SAMPLES_DIR, "cxr_*")))):
-        row = labels.get(os.path.basename(path), {})
-        facts = {"sex": row.get("sex") or None}
-        if row.get("age"):
-            facts["age_band"] = imaging.age_band(float(row["age"]))
-        analysis = engine.analyse_file(path, context=contexts[index % 3], **facts)
-        services.store.save_analysis(analysis, row.get("site", ""), row.get("labels", ""),
-                                     services.user.username if services.user else "")
-        services.log("scan analysed", {"source": analysis.scan["source"], "status": analysis.status},
-                     analysis.id)
+    rng = random.Random(11)
+    files = sorted(glob.glob(os.path.join(paths.SAMPLES_DIR, "cxr_*")))
+    for p_ in range(passes):
+        for index, path in enumerate(files):
+            row = labels.get(os.path.basename(path), {})
+            facts = {"sex": row.get("sex") or None}
+            if row.get("age"):
+                facts["age_band"] = imaging.age_band(float(row["age"]))
+            analysis = engine.analyse_file(path, context=contexts[(index + p_) % 3], **facts)
+            services.store.save_analysis(analysis, row.get("site", ""), row.get("labels", ""),
+                                         services.user.username if services.user else "")
+            if spread_days:
+                # more recent months busier, a winter peak - a plausible demo timeline
+                day = int(abs(rng.gauss(0, spread_days / 2.2))) % spread_days
+                if rng.random() < 0.25:
+                    day = rng.randint(250, 290) % spread_days
+                when = datetime.now() - timedelta(days=day, hours=rng.randint(0, 9),
+                                                  minutes=rng.randint(0, 59))
+                services.store.set_created(analysis.id, when.isoformat(timespec="seconds"))
+            services.log("scan analysed", {"source": analysis.scan["source"],
+                                           "status": analysis.status}, analysis.id)
     if not decide:
         return
-    import random
-
-    rng = random.Random(7)
-    for row in services.store.studies()[:14]:
+    for row in services.store.studies()[:max(14, len(files) * passes // 2)]:
         loaded = services.store.load(row["id"])
         if loaded is None:
             continue
@@ -112,6 +128,7 @@ def seed_demo(services, decide: bool = True) -> None:
                                            user.role)
         final = services.store.final_labels(row["id"], analysis)
         services.store.sign_off(row["id"], user.username, final, rng.uniform(15000, 45000))
+    services.retrain()
 
 
 def screenshots(folder: str) -> int:
@@ -144,13 +161,20 @@ def screenshots(folder: str) -> int:
     login._fill()
     grab(login, "01-signin.png")
     services.user = services.accounts.get("doctor")
-    seed_demo(services)
+    engine_choice = services.settings["engine"]
+    services.settings["engine"], services._engine = "builtin", None   # fast demo seeding
+    seed_demo(services, passes=3, spread_days=365)
+    services.settings["engine"], services._engine = engine_choice, None
     window = MainWindow(services)
     window.resize(size)
     for page, name in (("Home", "02-home.png"), ("Analyse", "03-analyse.png"),
                        ("Dashboard", "06-dashboard.png")):
         window.show_page(page)
         grab(window, name)
+    window.pages["Dashboard"].scroll.verticalScrollBar().setValue(760)
+    window.show_page("Dashboard")
+    window.pages["Dashboard"].scroll.verticalScrollBar().setValue(760)
+    grab(window, "06b-dashboard-breakdowns.png")
     # analyse page with a finished result
     analyse = window.pages["Analyse"]
     analyse._demo()
@@ -177,6 +201,13 @@ def screenshots(folder: str) -> int:
         review._ask()
         review.case_scroll.verticalScrollBar().setValue(860)
         grab(window, "05-review-evidence.png")
+        review._mode_changed("Guided")
+        review.case_scroll.verticalScrollBar().setValue(900)
+        grab(window, "05b-review-guided.png")
+        bar = review.case_scroll.verticalScrollBar()
+        bar.setValue(review.rec_card.y() - 20)
+        grab(window, "05c-review-report.png")
+        review._mode_changed("Concise")
         services.settings["blinded_first_read"] = True
         blind = next((r for r in services.store.studies(state="open")
                       if r["status"] == "findings" and r["id"] != target["id"]), None)
@@ -193,6 +224,10 @@ def screenshots(folder: str) -> int:
     evaluation_page._show_bench(report)
     evaluation_page.refresh()
     grab(window, "07-evaluation.png")
+    evaluation_page.scroll.verticalScrollBar().setValue(evaluation_page.sim.y() - 10)
+    grab(window, "07b-simulation.png")
+    evaluation_page.scroll.verticalScrollBar().setValue(evaluation_page.bias_card.y() - 10)
+    grab(window, "07c-bias-learning.png")
     window.close()
 
     services.user = services.accounts.get("admin")

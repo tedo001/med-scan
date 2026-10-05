@@ -87,3 +87,78 @@ def subgroups(store) -> Dict[str, object]:
                                         f"{all_:.0%} overall")
         out["dimensions"][title] = table
     return out
+
+
+# ------------------------------------------------------------- mitigation -----
+def _rates(pairs, threshold):
+    tp = sum(1 for p, t in pairs if t and p >= threshold)
+    fn = sum(1 for p, t in pairs if t and p < threshold)
+    tn = sum(1 for p, t in pairs if not t and p < threshold)
+    fp = sum(1 for p, t in pairs if not t and p >= threshold)
+    sens = tp / (tp + fn) if tp + fn else None
+    spec = tn / (tn + fp) if tn + fp else None
+    return sens, spec
+
+
+def mitigate(records, labels, default: float = 0.5, max_spec_drop: float = 0.10) -> dict:
+    """Per-subgroup operating thresholds that close sensitivity gaps - *reducing* bias.
+
+    ``records`` come from :func:`msx.evaluation.benchmark` (scores and truth per
+    image, with sex and age band). For each subgroup (sex, age band) whose
+    sensitivity at the default threshold trails the overall figure by more than
+    :data:`GAP`, the threshold is lowered in 0.02 steps (never below 0.30) until
+    the gap closes or the subgroup's specificity has dropped by more than
+    ``max_spec_drop``. Thresholds are only ever *lowered*: a subgroup is never
+    made less sensitive to equalise numbers. Returns the thresholds and a
+    before / after table; :class:`msx.pipeline.AnalysisEngine` applies them.
+    """
+    def pairs_for(rows):
+        return [(r["scores"].get(l, 0.0), int(l in r["truth"])) for r in rows if not r["held"]
+                for l in labels]
+
+    usable = [r for r in records if not r.get("held")]
+    overall_sens, overall_spec = _rates(pairs_for(usable), default)
+    table, thresholds = [], {}
+    for key, title in (("sex", "Sex"), ("age_band", "Age band")):
+        groups = {}
+        for r in usable:
+            groups.setdefault(r.get(key) or "unknown", []).append(r)
+        for value, rows in sorted(groups.items()):
+            pairs = pairs_for(rows)
+            if sum(t for _, t in pairs) < MIN_N or value == "unknown":
+                continue
+            before_sens, before_spec = _rates(pairs, default)
+            chosen = default
+            if overall_sens is not None and before_sens is not None and \
+                    overall_sens - before_sens > GAP:
+                t = default
+                while t > 0.30:
+                    t = round(t - 0.02, 2)
+                    sens, spec = _rates(pairs, t)
+                    if before_spec is not None and spec is not None and before_spec - spec > max_spec_drop:
+                        break
+                    chosen = t
+                    if overall_sens - sens <= GAP / 2:
+                        break
+            after_sens, after_spec = _rates(pairs, chosen)
+            if chosen != default:
+                thresholds[f"{key}:{value}"] = chosen
+            table.append({"group": f"{title} = {value}", "threshold": chosen,
+                          "sens_before": before_sens, "sens_after": after_sens,
+                          "spec_before": before_spec, "spec_after": after_spec})
+    gaps_before = [overall_sens - t["sens_before"] for t in table
+                   if overall_sens is not None and t["sens_before"] is not None]
+    gaps_after = [overall_sens - t["sens_after"] for t in table
+                  if overall_sens is not None and t["sens_after"] is not None]
+    return {"overall_sensitivity": overall_sens, "overall_specificity": overall_spec,
+            "thresholds": thresholds, "table": table,
+            "max_gap_before": round(max(gaps_before), 3) if gaps_before else None,
+            "max_gap_after": round(max(gaps_after), 3) if gaps_after else None}
+
+
+def threshold_for(scan_facts: dict, thresholds: dict, default: float) -> float:
+    """The lowest applicable subgroup threshold for this scan (or the default)."""
+    candidates = [thresholds[k] for k in (f"sex:{scan_facts.get('sex', '')}",
+                                          f"age_band:{scan_facts.get('age_band', '')}")
+                  if k in thresholds]
+    return min(candidates + [default])

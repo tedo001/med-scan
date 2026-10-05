@@ -198,6 +198,61 @@ applied to every later analysis.
 
 ---
 
+## Adapting to the doctor, learning from the doctor
+
+The stages above adapt to the **clinical situation** and to the engine's own
+uncertainty. These pieces adapt to the **doctor**, learn from them, and close
+the loop with recommendations and a report. They map directly onto the
+problem statement.
+
+| Problem statement asks for | Module | What it does |
+|---|---|---|
+| Adjust help to different doctors *without assuming ability* | `msx/support.py` | Four **doctor-chosen** support modes: Guided, Concise, Second opinion, Evidence-first. A mode is saved on the doctor's own account and switchable on any case. It is never set from title or seniority |
+| Explain why a finding may matter | `msx/explain.py` | A clinical significance, urgency and "if missed" block per finding, plus a "how to read this" checklist in Guided mode |
+| Recommendations (deliverable) | `msx/recommend.py` | Urgency tier (Now / Same day / Within 1 week / Routine), next test, follow-up and referral. Adjusted for confidence (low → "confirm before acting"), nodule size (Fleischner bands), context (Emergency brings items forward) and **patterns across findings** (cardiomegaly + effusion → one heart-failure work-up) |
+| Generative AI (deliverable) | `msx/report.py` | A draft report (EXAMINATION / TECHNIQUE / FINDINGS / IMPRESSION / RECOMMENDATIONS) that the doctor edits and signs. A local LLM writes the prose when available; output is fact-checked against the findings; a grounded template is the fallback |
+| Machine learning (deliverable) and learning from doctors | `msx/learner.py` | A logistic-regression stacker trained on every finding's eventual verdict: ground truth, Accept / Reject / Correct, or Add (an AI miss). 5-fold cross-validated, blended into each finding with weight `min(0.5, n/200)`, retrained after every sign-off |
+| Robust anatomy on real films | `msx/screening.py` `LungSegmenter` | TorchXRayVision **PSPNet** lung and heart segmentation in hybrid mode, with a plausibility check and classical fallback. The test-time-augmentation copies reuse the warped masks |
+| Test Doctor + AI vs either alone, with *simulations* | `msx/simulation.py` | Simulated readers: 3 skill levels × 3 trust styles (sceptical, calibrated, over-trusting) on the AI's real outputs. Reports accuracy for Doctor alone, AI alone and Doctor + AI, **automation bias** and **rescue rate**, with the AI as measured and degraded to 15 % error |
+| *Reduce* bias, not only monitor it | `msx/bias.py` `mitigate` | Per-subgroup operating thresholds (sex, age band). A threshold is only ever lowered, and only while specificity holds, to close a sensitivity gap. Before / after table on the Evaluation page; the analyser applies the thresholds |
+
+**What the simulation shows** (phantom set, AI degraded to 15 % error): a
+*calibrated* reader, who follows the AI only when its confidence is ≥ 0.75,
+beats both the AI and their own solo read:
+
+| Reader | Doctor alone | AI alone | Doctor + AI |
+|---|---|---|---|
+| Trainee | 0.86 | 0.85 | **0.93** |
+| Registrar | 0.90 | 0.84 | **0.94** |
+
+An *over-trusting* reader loses that gain, with automation bias of about 0.85.
+That is the case for showing confidence and for the blinded first read.
+
+## Results on real chest X-rays
+
+```
+python tools/fetch_real_samples.py
+python -m msx.evaluation ~/.medscan/real_samples --engine hybrid
+```
+
+The set is 50 PA films from the public COVID-19 Image Data Collection: 40
+pneumonia, labelled as consolidation, and 9 no-finding (one film failed to
+download). The images are not redistributed. The full report is in
+`docs/real_eval_hybrid.json`.
+
+| Metric | Value |
+|---|---|
+| Quality gate: films accepted | 49 / 50 |
+| Consolidation (pneumonia) sensitivity | **0.80** |
+| Consolidation specificity | 0.44 (only 9 normal films) |
+| Consolidation AUC | 0.74 |
+| Adaptive vs fixed | 28 % fewer modules, 22 % fewer model calls; sensitivity −0.025 |
+
+This is a small, imbalanced convenience set, so it is a sanity check, not
+validation. Specificity is the weak point: published journal figures are often
+cropped and post-processed. The next step is CheXpert and NIH ChestX-ray14 with
+the same `labels.csv` format.
+
 ## Results on the synthetic phantom set
 
 ```

@@ -15,8 +15,9 @@ class AccountsPage(Page):
         super().__init__("Accounts", "PBKDF2-SHA256 · lockout after 5 failures")
         self.services = services
         card = Card("Accounts")
-        self.table = QTableWidget(0, 5)
-        self.table.setHorizontalHeaderLabels(["Username", "Name", "Role", "Title", "Last sign-in"])
+        self.table = QTableWidget(0, 6)
+        self.table.setHorizontalHeaderLabels(["Username", "Name", "Role", "Title", "Support mode (their choice)",
+                                              "Last sign-in"])
         self.table.verticalHeader().setVisible(False)
         self.table.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
         self.table.setMinimumHeight(260)
@@ -47,7 +48,10 @@ class AccountsPage(Page):
         accounts = self.services.accounts.all()
         self.table.setRowCount(len(accounts))
         for r, a in enumerate(accounts):
-            for c, v in enumerate((a.username, a.display, a.role, a.title, a.last_login or "—")):
+            from msx import support
+
+            for c, v in enumerate((a.username, a.display, a.role, a.title,
+                                   support.get(a.support_mode).name, a.last_login or "—")):
                 self.table.setItem(r, c, QTableWidgetItem(v))
 
     def _selected(self):

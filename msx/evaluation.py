@@ -86,9 +86,13 @@ def _label_positive(analysis, label: str) -> int:
 
 
 def benchmark(folder: str, engine: str = "builtin", context: str = "Routine OPD",
-              modes: Sequence[str] = ("fixed", "adaptive"), progress=None) -> Dict[str, object]:
+              modes: Sequence[str] = ("fixed", "adaptive"), progress=None,
+              simulate_runs: int = 200, analyser: Optional[AnalysisEngine] = None) -> Dict[str, object]:
+    """Analyse every labelled image per mode and score it; adds the reader simulation."""
+    from . import simulation
+
     rows = load_labels(folder)
-    analyser = AnalysisEngine(engine=engine)
+    analyser = analyser or AnalysisEngine(engine=engine)
     report: Dict[str, object] = {"folder": os.path.abspath(folder), "engine": analyser.engine_label,
                                  "context": context, "images": len(rows), "modes": {}}
     total = len(rows) * len(modes)
@@ -109,6 +113,16 @@ def benchmark(folder: str, engine: str = "builtin", context: str = "Routine OPD"
             if progress:
                 progress(done, total, f"{mode}: {row['file']}")
         report["modes"][mode] = _score(results)
+        if mode == modes[-1]:
+            labels = [l for l in EVAL_LABELS if any(l in r["truth"] for r, _, _ in results)]
+            cases = simulation.cases_from_benchmark([(r, a) for r, a, _ in results], labels)
+            report["simulation"] = {
+                "clean": simulation.simulate(cases, labels, 0.0, simulate_runs),
+                "stressed": simulation.simulate(cases, labels, 0.15, simulate_runs)}
+            report["records"] = [
+                {"file": r["file"], "sex": a.scan.get("sex", ""), "age_band": a.scan.get("age_band", ""),
+                 "truth": sorted(r["truth"]), "held": a.status == "quality-hold",
+                 "scores": {l: _label_score(a, l) for l in EVAL_LABELS}} for r, a, _ in results]
     if "fixed" in report["modes"] and "adaptive" in report["modes"]:
         f, a = report["modes"]["fixed"], report["modes"]["adaptive"]
         report["comparison"] = {

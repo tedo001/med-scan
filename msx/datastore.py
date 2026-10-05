@@ -181,6 +181,10 @@ class DataStore:
         self._exec("DELETE FROM decisions WHERE study_id = ?", (study_id,))
         self._exec("DELETE FROM questions WHERE study_id = ?", (study_id,))
 
+    def set_created(self, study_id: str, when: str) -> None:
+        """Re-date a study (demo seeding and imports of historical studies)."""
+        self._exec("UPDATE studies SET created = ? WHERE id = ?", (when, study_id))
+
     def set_ground_truth(self, study_id: str, labels: str) -> None:
         self._exec("UPDATE studies SET ground_truth = ? WHERE id = ?", (labels, study_id))
 

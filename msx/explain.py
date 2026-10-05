@@ -37,7 +37,7 @@ from typing import Dict, List, Optional
 from .findings import NEGATIVE, POSITIVE, POSSIBLE, UNCERTAIN, Finding
 from .knowledge import KnowledgeBase, default_kb
 
-__all__ = ["DEPTHS", "build", "answer", "LLMNarrator", "escalate"]
+__all__ = ["DEPTHS", "build", "answer", "LLMNarrator", "escalate", "SIGNIFICANCE", "CHECKLIST"]
 
 DEPTHS = ("brief", "standard", "detailed")
 URGENT = {"Pneumothorax": 3, "Effusion": 2, "Consolidation": 2, "Mass": 2, "Edema": 2,
@@ -51,6 +51,53 @@ ACTIONS = {
     "Mass": "Contrast CT chest and upper abdomen; suspected lung cancer pathway.",
     "Atelectasis": "Check inspiration and post-operative status; look for an obstructing cause if lobar.",
     "Edema": "Correlate with fluid status and cardiac function.",
+}
+
+#: Why a finding may matter: clinical significance, how urgent, what a miss costs.
+SIGNIFICANCE = {
+    "Pneumothorax": ("Air in the pleural space can collapse the lung; under tension it compresses "
+                     "the heart and great vessels.", "Immediate if the patient is unstable",
+                     "A missed tension pneumothorax can be fatal within minutes."),
+    "Effusion": ("Fluid around the lung - heart failure, infection (parapneumonic / empyema), "
+                 "malignancy or kidney / liver disease.", "Same day if new and unexplained",
+                 "A missed empyema or malignant effusion delays drainage and diagnosis."),
+    "Consolidation": ("Airspace filled with fluid, pus or cells - most often pneumonia in the "
+                      "right clinical setting.", "Same day with fever or hypoxia",
+                      "Untreated pneumonia can progress to sepsis; persistent consolidation can "
+                      "hide a tumour."),
+    "Cardiomegaly": ("An enlarged cardiac silhouette suggests chamber enlargement or pericardial "
+                     "effusion.", "Routine unless signs of failure",
+                     "Missed cardiomyopathy or pericardial effusion delays treatment."),
+    "Nodule": ("A small round opacity: usually benign (granuloma, scar) but can be an early lung "
+               "cancer.", "Routine - but must not be lost to follow-up",
+               "A missed early cancer loses the window for curative treatment."),
+    "Mass": ("A lesion over 30 mm carries a high probability of malignancy.", "Urgent referral",
+             "A missed mass delays a cancer diagnosis."),
+    "Atelectasis": ("Loss of lung volume - post-operative, poor inspiration, or an obstructing "
+                    "lesion.", "Routine unless lobar", "A missed obstructing tumour behind lobar collapse."),
+    "Edema": ("Fluid in the lung tissue - usually cardiac failure or fluid overload.",
+              "Same day", "Missed decompensated heart failure."),
+}
+
+#: A short "how to read this" checklist per finding - shown in Guided mode.
+CHECKLIST = {
+    "Cardiomegaly": ["Confirm the film is PA and well inspired (≥ 6 anterior ribs).",
+                     "Measure the widest heart diameter and the widest inner chest diameter.",
+                     "CTR above 0.50 suggests enlargement; look for effusions and upper-lobe diversion."],
+    "Effusion": ["Look at both costophrenic angles - are they sharp?",
+                 "Look for a meniscus climbing the lateral chest wall.",
+                 "Compare the hemidiaphragms; a lateral film or ultrasound confirms small effusions."],
+    "Pneumothorax": ["Trace the lung edge: is there a thin white pleural line?",
+                     "Check for absent lung markings beyond that line, usually at the apex.",
+                     "Look for mediastinal shift away from the side - a sign of tension."],
+    "Consolidation": ["Find the opacity: is it confluent and does it hide the vessels?",
+                      "Look for air bronchograms inside it.",
+                      "Which border is lost? Right heart border = middle lobe, diaphragm = lower lobe."],
+    "Nodule": ["Check it is inside the lung, not a nipple, skin lesion or rib end.",
+               "Estimate its size and look for calcification.",
+               "Compare with any previous film; refer for CT if new or > 6 mm."],
+    "Mass": ["Measure it; anything over 30 mm is a mass.", "Look for hilar enlargement, effusion "
+             "and rib destruction.", "Arrange CT chest and abdomen."],
 }
 
 
@@ -71,9 +118,17 @@ def _ranked(findings: List[Finding]) -> List[Finding]:
 
 def build(findings: List[Finding], quality: Dict[str, object], routing: Dict[str, object],
           context: str, depth: str, kb: Optional[KnowledgeBase] = None,
-          auto_escalate: bool = True) -> Dict[str, object]:
-    """The explanation as structured sections plus a plain-text rendering."""
+          auto_escalate: bool = True, mode: str = "") -> Dict[str, object]:
+    """The explanation as structured sections plus a plain-text rendering.
+
+    ``mode`` is the doctor's support mode (:mod:`msx.support`): it adds the
+    reading checklist and the "why it matters" block, or puts the guideline
+    evidence first.
+    """
+    from . import support
+
     kb = kb or default_kb()
+    chosen = support.get(mode) if mode else None
     requested = depth
     if auto_escalate:
         depth = escalate(depth, findings)
@@ -124,6 +179,12 @@ def build(findings: List[Finding], quality: Dict[str, object], routing: Dict[str
                              f"quality {u.get('quality', 1):.2f}")
             section = {"title": f.title, "lines": lines, "limitations": f.limitations,
                        "action": ACTIONS.get(f.label, "")}
+            if chosen is None or chosen.significance:
+                why = SIGNIFICANCE.get(f.label)
+                if why:
+                    section["why"] = {"significance": why[0], "urgency": why[1], "if_missed": why[2]}
+            if chosen is not None and chosen.checklist and f.label in CHECKLIST:
+                section["checklist"] = CHECKLIST[f.label]
             passages = kb.search(f"{f.label} {' '.join(f.zones)} {f.side} signs management",
                                  f.label, 2 if depth == "detailed" else 1)
             section["evidence"] = [{"title": p.title, "text": p.text, "cite": p.cite()}
@@ -145,7 +206,15 @@ def build(findings: List[Finding], quality: Dict[str, object], routing: Dict[str
                 sections.append({"title": "Using this result", "lines": [general[0].text],
                                  "cite": general[0].cite()})
                 citations.append(general[0].cite())
-    return _pack(headline, sections, citations, depth, requested, context)
+    if chosen is not None and chosen.evidence_first:
+        evidence = [e for s_ in sections for e in s_.get("evidence", [])]
+        if evidence:
+            for s_ in sections:
+                s_.pop("evidence", None)
+            sections.insert(0, {"title": "Guideline evidence", "lines": [], "evidence": evidence})
+    out = _pack(headline, sections, citations, depth, requested, context)
+    out["mode"] = chosen.key if chosen is not None else ""
+    return out
 
 
 def _pack(headline, sections, citations, depth, requested, context):
@@ -160,6 +229,10 @@ def _pack(headline, sections, citations, depth, requested, context):
         text += [f"  - {line}" for line in s.get("lines", [])]
         if s.get("limitations"):
             text += [f"  ! {line}" for line in s["limitations"]]
+        if s.get("why"):
+            text.append(f"  ? why it matters: {s['why']['significance']} ({s['why']['urgency']})")
+        for step in s.get("checklist", []):
+            text.append(f"  [ ] {step}")
         if s.get("action"):
             text.append(f"  > {s['action']}")
         for e in s.get("evidence", []):

@@ -33,7 +33,8 @@ from typing import Dict, List, Optional
 import numpy as np
 
 from . import anatomy as anatomy_mod
-from . import explain, imaging, quality as quality_mod, router, screening, specialists, uncertainty
+from . import bias, explain, imaging, learner as learner_mod, quality as quality_mod, recommend, \
+    router, screening, specialists, uncertainty
 from .findings import NEGATIVE, POSITIVE, POSSIBLE, UNCERTAIN, Finding
 from .imaging import Scan
 
@@ -65,6 +66,8 @@ class Analysis:
     routing: Dict[str, object] = field(default_factory=dict)
     findings: List[Finding] = field(default_factory=list)
     explanation: Dict[str, object] = field(default_factory=dict)
+    recommendations: List[Dict[str, object]] = field(default_factory=list)
+    positive_at: float = 0.5
     stages: List[Stage] = field(default_factory=list)
     status: str = "findings"
     model_calls: int = 0
@@ -97,7 +100,8 @@ class Analysis:
                 "mode": self.mode, "engine": self.engine, "quality": self.quality,
                 "screen": self.screen, "routing": self.routing,
                 "findings": [f.to_dict() for f in self.findings],
-                "explanation": self.explanation,
+                "explanation": self.explanation, "recommendations": self.recommendations,
+                "positive_at": self.positive_at,
                 "stages": [s.__dict__ for s in self.stages], "status": self.status,
                 "model_calls": self.model_calls, "total_ms": round(self.total_ms, 1)}
 
@@ -109,26 +113,37 @@ class Analysis:
                    screen=data.get("screen", {}), routing=data.get("routing", {}),
                    findings=[Finding.from_dict(f) for f in data.get("findings", [])],
                    explanation=data.get("explanation", {}),
+                   recommendations=data.get("recommendations", []),
+                   positive_at=float(data.get("positive_at", 0.5)),
                    stages=[Stage(**s) for s in data.get("stages", [])],
                    status=data.get("status", ""), model_calls=int(data.get("model_calls", 0)),
                    total_ms=float(data.get("total_ms", 0)))
 
 
-def _augment(work: np.ndarray, k: int) -> List[np.ndarray]:
-    """Small, plausible perturbations: shift, scale, exposure (gamma)."""
+def _matrices(size: int, k: int):
+    """Small, plausible perturbations: (affine shift/scale matrix, exposure gamma)."""
     import cv2
 
-    size = work.shape[0]
     recipes = [(8, 0, 1.0, 1.0), (-8, 6, 1.0, 0.85), (0, -6, 0.96, 1.15), (4, 4, 1.04, 1.0),
                (-4, -4, 1.0, 0.92), (0, 8, 0.98, 1.08)][:k]
     out = []
     for dx, dy, scale, gamma in recipes:
         matrix = cv2.getRotationMatrix2D((size / 2, size / 2), 0, scale)
         matrix[:, 2] += (dx, dy)
-        moved = cv2.warpAffine(work, matrix, (size, size), flags=cv2.INTER_LINEAR,
-                               borderValue=0.0)
-        out.append(np.clip(moved, 0, 1) ** gamma)
+        out.append((matrix, gamma))
     return out
+
+
+def _warp(image: np.ndarray, matrix, nearest: bool = False) -> np.ndarray:
+    import cv2
+
+    size = image.shape[0]
+    return cv2.warpAffine(image.astype(np.float32), matrix, (size, size),
+                          flags=cv2.INTER_NEAREST if nearest else cv2.INTER_LINEAR, borderValue=0.0)
+
+
+def _augment(work: np.ndarray, k: int) -> List[np.ndarray]:
+    return [np.clip(_warp(work, m), 0, 1) ** g for m, g in _matrices(work.shape[0], k)]
 
 
 class AnalysisEngine:
@@ -138,13 +153,17 @@ class AnalysisEngine:
                  temperatures: Optional[Dict[str, float]] = None,
                  route_overrides: Optional[Dict[str, Dict[str, float]]] = None,
                  narrator: Optional[explain.LLMNarrator] = None,
-                 positive_at: float = uncertainty.POSITIVE_AT):
+                 positive_at: float = uncertainty.POSITIVE_AT,
+                 subgroup_thresholds: Optional[Dict[str, float]] = None,
+                 learner: Optional[learner_mod.Learner] = None):
         self.engine_name = engine
         self.tta = tta
         self.temperatures = temperatures or {}
         self.route_overrides = route_overrides or {}
         self.narrator = narrator
         self.positive_at = positive_at
+        self.subgroup_thresholds = subgroup_thresholds or {}
+        self.learner = learner
         self.measure_screen = screening.MeasurementScreen()
 
     @property
@@ -177,9 +196,20 @@ class AnalysisEngine:
         t = clock()
         work = imaging.standardise(scan.pixels)
         anatomy = anatomy_mod.segment(work)
+        learned_masks = None
+        if self.engine_name == "hybrid" and screening.deep_available():
+            segmenter = screening.get_segmenter()
+            if segmenter is not None:
+                learned_masks = segmenter.masks(work)
+                candidate = anatomy_mod.from_masks(work, learned_masks["right"],
+                                                   learned_masks["left"], learned_masks["heart"])
+                if anatomy_mod.plausible(candidate):
+                    anatomy = candidate
+                else:
+                    learned_masks = None
         stages.append(Stage("Preprocess", (clock() - t) * 1000, "ok",
                             f"{scan.original_shape[1]}x{scan.original_shape[0]} -> 512x512; "
-                            f"lungs {'found' if anatomy.found else 'not found'}"
+                            f"lungs {'found' if anatomy.found else 'not found'} ({anatomy.source})"
                             + (f"; {len(scan.removed_tags)} identifiers removed"
                                if scan.removed_tags else "")))
 
@@ -195,6 +225,8 @@ class AnalysisEngine:
                             scan=scan.facts(), context=context, mode=mode,
                             engine=self.engine_label, quality=quality.to_dict(), work=work,
                             lung_mask=anatomy.lung_mask if anatomy.found else None)
+        positive_at = bias.threshold_for(scan.facts(), self.subgroup_thresholds, self.positive_at)
+        analysis.positive_at = positive_at
         base_depth = depth or str(router.CONTEXTS.get(context, router.CONTEXTS["Routine OPD"])["depth"])
 
         if not quality.accepted:
@@ -202,6 +234,8 @@ class AnalysisEngine:
                 stages.append(Stage(name, 0.0, "skipped", "scan held for human review"))
             analysis.status = "quality-hold"
             analysis.explanation = explain.build([], analysis.quality, {}, context, base_depth)
+            analysis.recommendations = [r.to_dict() for r in recommend.recommend(
+                [], context, analysis.quality)]
             analysis.stages = stages
             analysis.total_ms = (clock() - t0) * 1000
             return analysis
@@ -239,8 +273,16 @@ class AnalysisEngine:
         findings: List[Finding] = []
         heat = np.zeros(work.shape, dtype=np.float32)
         if decision.groups:
-            augmented_works = _augment(work, self.tta)
-            augmented = [(w, anatomy_mod.segment(w)) for w in augmented_works]
+            recipes = _matrices(work.shape[0], self.tta)
+            augmented_works = [np.clip(_warp(work, m), 0, 1) ** g for m, g in recipes]
+            if learned_masks is not None:      # move the learned masks with the image
+                augmented = [(w, anatomy_mod.from_masks(
+                    w, _warp(learned_masks["right"], m, True) > 0.5,
+                    _warp(learned_masks["left"], m, True) > 0.5,
+                    _warp(learned_masks["heart"], m, True) > 0.5))
+                    for w, (m, _) in zip(augmented_works, recipes)]
+            else:
+                augmented = [(w, anatomy_mod.segment(w)) for w in augmented_works]
             deep_tta: Dict[str, List[float]] = {}
             if deep is not None and augmented_works:
                 rows = deep.predict_batch(augmented_works)
@@ -255,7 +297,8 @@ class AnalysisEngine:
                 produced = module.run(ctx)
                 calls += 1 + len(augmented)
                 for finding in produced:
-                    uncertainty.score(finding, warnings, self.temperatures, self.positive_at)
+                    self._learned(finding, quality.score, scan.view)
+                    uncertainty.score(finding, warnings, self.temperatures, positive_at)
                     if finding.shown:
                         map_ = module.heatmap(finding, ctx)
                         if deep is not None and module.deep_map.get(finding.label):
@@ -292,6 +335,8 @@ class AnalysisEngine:
 
         analysis.findings = findings
         analysis.explanation = explanation
+        analysis.recommendations = [r.to_dict() for r in recommend.recommend(
+            findings, context, analysis.quality)]
         analysis.heat = heat if heat.max() > 0 else None
         analysis.model_calls = calls
         analysis.stages = stages
@@ -299,6 +344,19 @@ class AnalysisEngine:
                            "uncertain" if counts[UNCERTAIN] else "no-finding")
         analysis.total_ms = (clock() - t0) * 1000
         return analysis
+
+    def _learned(self, finding: Finding, quality_score: float, view: str) -> None:
+        """Blend in the feedback-trained model, weighted by how much feedback it has seen."""
+        if self.learner is None or not self.learner.ready or finding.label not in learner_mod.LABELS:
+            return
+        p = self.learner.predict(finding.to_dict(), quality_score, view)
+        if p is None:
+            return
+        w = self.learner.weight
+        finding.sources["learned"] = round(p, 4)
+        finding.probability = round((1 - w) * finding.probability + w * p, 4)
+        finding.evidence.append(f"Feedback-trained model {p:.2f} (weight {w:.2f}, "
+                                f"{self.learner.info.get('n', 0)} labelled findings)")
 
     @staticmethod
     def _tidy(findings: List[Finding]) -> List[Finding]:

@@ -10,6 +10,7 @@ from msx import accounts as accounts_mod, explain, prefs, screening
 from msx.audit import AuditLog
 from msx.datastore import DataStore
 from msx.knowledge import default_kb
+from msx.learner import Learner
 from msx.pipeline import AnalysisEngine
 
 
@@ -28,6 +29,7 @@ class Services(QObject):
         self.kb = default_kb()
         self.user: Optional[accounts_mod.Account] = None
         self._engine: Optional[AnalysisEngine] = None
+        self.learner = Learner()
 
     # -- the engine is rebuilt when settings change --------------------------
     @property
@@ -43,13 +45,23 @@ class Services(QObject):
                                           temperatures=s["temperatures"],
                                           route_overrides=s["route_overrides"],
                                           narrator=self.narrator,
-                                          positive_at=float(s["positive_at"]))
+                                          positive_at=float(s["positive_at"]),
+                                          subgroup_thresholds=s["subgroup_thresholds"],
+                                          learner=self.learner)
         return self._engine
 
     def save_settings(self) -> None:
         prefs.save(self.settings)
         self._engine = None
         self.settings_changed.emit()
+
+    def retrain(self) -> dict:
+        """Retrain the feedback model from every decision and ground truth so far."""
+        info = self.learner.train(self.store)
+        self.log("feedback model retrained", {k: info.get(k) for k in
+                                              ("n", "status", "cv_accuracy", "cv_brier")},
+                 category="system")
+        return info
 
     def engine_status(self) -> str:
         if self.settings["engine"] == "hybrid" and screening.deep_available():

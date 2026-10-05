@@ -246,3 +246,48 @@ class DeepScreen:
             return np.zeros(work.shape, dtype=np.float32)
         cam = cv2.resize(cam / cam.max(), work.shape[::-1], interpolation=cv2.INTER_CUBIC)
         return np.clip(cam, 0, 1).astype(np.float32)
+
+
+# ------------------------------------------------------------ segmenter ---------
+_SEG = None
+_SEG_ERROR: Optional[str] = None
+
+
+def get_segmenter() -> Optional["LungSegmenter"]:
+    """TorchXRayVision's PSPNet chest segmenter, loaded on first use; None if unavailable."""
+    global _SEG, _SEG_ERROR
+    if _SEG is None and _SEG_ERROR is None:
+        try:
+            _SEG = LungSegmenter()
+        except Exception as error:  # noqa: BLE001
+            _SEG_ERROR = f"{type(error).__name__}: {error}"
+    return _SEG
+
+
+class LungSegmenter:
+    """PSPNet trained on ChestX-Det: 14 structures; we use both lungs and the heart.
+
+    Classical thresholding fails on tightly cropped, scanned or post-processed
+    films where the lungs merge with the image edge. The learned segmenter does
+    not, so the hybrid engine uses it first and falls back to the classical
+    method when its masks are implausible (e.g. on synthetic phantoms).
+    """
+
+    name = "PSPNet (TorchXRayVision, ChestX-Det)"
+
+    def __init__(self) -> None:
+        import torch
+        import torchxrayvision as xrv
+
+        self.torch = torch
+        self.model = xrv.baseline_models.chestx_det.PSPNet()
+        self.model.eval()
+        self.targets = list(self.model.targets)
+
+    def masks(self, work: np.ndarray) -> Dict[str, np.ndarray]:
+        tensor = self.torch.from_numpy(((work * 2 - 1) * 1024).astype(np.float32))[None, None]
+        with self.torch.no_grad():
+            out = self.model(tensor)[0].numpy()
+        pick = lambda name: out[self.targets.index(name)] > 0  # noqa: E731
+        # "Left Lung" is the patient's left - image right
+        return {"right": pick("Right Lung"), "left": pick("Left Lung"), "heart": pick("Heart")}

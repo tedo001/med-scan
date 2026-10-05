@@ -82,7 +82,7 @@ def score(finding: Finding, quality_warnings: int = 0,
     sources = finding.sources
     if "deep" in sources and "measurement" in sources and abs(sources["deep"] - 0.5) > 0.1:
         agreement = 1 - 0.5 * abs(sources["deep"] - sources["measurement"])
-    single_source = len(sources) == 1 and "deep" in sources
+    single_source = set(sources) - {"learned"} == {"deep"}
     quality = max(0.6, 1 - 0.08 * quality_warnings)
     confidence = (0.5 * decisiveness + 0.5 * stability) * agreement * quality
     if single_source:

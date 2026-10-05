@@ -45,7 +45,10 @@ class EnginesPage(Page):
         deep_ok = screening.deep_available()
         loaded = screening._DEEP is not None
         rows = [
-            ("1 Preprocess", "OpenCV + pydicom", "ready", "letterbox 512², DICOM de-identification, lung segmentation (Otsu, adaptive)"),
+            ("1 Preprocess", "OpenCV + pydicom", "ready", "letterbox 512², DICOM de-identification, classical lung segmentation"),
+            ("1 Preprocess", "PSPNet lung + heart segmenter (TorchXRayVision)",
+             "loaded" if screening._SEG is not None else "available" if deep_ok else "not installed",
+             "hybrid mode: learned masks first, classical fallback when implausible"),
             ("2 Quality", "built-in", "ready", "7 checks: resolution, sharpness, contrast, exposure, lung fields, coverage, symmetry"),
             ("3 Screen", "built-in measurements", "ready", "CTR, lung asymmetry, CP blunting, zone density, lucency, coarse LoG"),
             ("3 Screen", "DenseNet-121 (TorchXRayVision, densenet121-res224-all)",
@@ -53,10 +56,18 @@ class EnginesPage(Page):
              "18 pathologies, 8 public datasets; Grad-CAM for routed findings"),
             ("4 Route", "Adaptive Analysis Router", "ready", "context thresholds, early exit, borderline band"),
             ("5 Specialists", "Cardiac · Pleural · Parenchyma · Nodule", "ready", "measurement + deep fusion in log-odds, TTA ×" + str(self.services.settings["tta"])),
+            ("5b Learning", "Feedback-trained logistic stacker (ML)",
+             "trained" if self.services.learner.ready else "collecting feedback",
+             f"{self.services.learner.info.get('n', 0)} labelled findings · blend weight {self.services.learner.weight:.2f}"),
             ("6 Confidence", "calibration + TTA + abstention", "ready",
-             "temperatures: " + (", ".join(f"{k}={v}" for k, v in self.services.settings["temperatures"].items()) or "none (T=1)")),
+             "temperatures: " + (", ".join(f"{k}={v}" for k, v in self.services.settings["temperatures"].items()) or "none (T=1)")
+             + " · subgroup thresholds: " + (", ".join(f"{k}={v}" for k, v in self.services.settings["subgroup_thresholds"].items()) or "none")),
             ("7 Explain", f"BM25 RAG over {len(self.services.kb.passages)} cited passages", "ready",
              "LLM narrator: " + (f"{self.services.settings['llm_model']} (guarded)" if self.services.settings["llm_enabled"] else "off - template text")),
+            ("7b Recommend", "Recommendation engine", "ready", "urgency tier, next test, follow-up, patterns across findings"),
+            ("7c Report", "Generative draft report", "ready",
+             "LLM " + (self.services.settings["llm_model"] if self.services.settings["llm_enabled"] else "off")
+             + " · grounded template fallback · fact-checked"),
             ("8 Record", "SQLite + hash-chained JSONL", "ready", self.services.store.path),
         ]
         clear(self.status.body)

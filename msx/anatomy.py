@@ -110,6 +110,8 @@ class Anatomy:
     lungs: Dict[str, Lung] = field(default_factory=dict)
     threshold: float = 0.0
     notes: List[str] = field(default_factory=list)
+    heart: Optional[np.ndarray] = None      # from the learned segmenter, when used
+    source: str = "classical"               # "classical" or "learned (PSPNet)"
 
     @property
     def found(self) -> bool:
@@ -142,6 +144,13 @@ class Anatomy:
         excluding the bottom 12 % where the diaphragm domes curve the margins.
         """
         right, left = self.lungs["right"], self.lungs["left"]
+        if self.heart is not None and self.heart.any():
+            best = (0, right.medial, left.medial, 0)
+            for row in np.flatnonzero(self.heart.any(axis=1)):
+                cols = np.flatnonzero(self.heart[row])
+                if cols[-1] - cols[0] > best[0]:
+                    best = (int(cols[-1] - cols[0]), int(cols[0]), int(cols[-1]), int(row))
+            return best
         top = int(max(right.top, left.top) + 0.48 * min(right.height, left.height))
         bottom = int(min(right.bottom, left.bottom) - 0.12 * min(right.height, left.height))
         best = (0, right.medial, left.medial, top)
@@ -250,6 +259,62 @@ def _plausible(options, height, width):
         if area < 0.025 * height * width or rows.max() - rows.min() < 0.25 * height:
             return False
     return True
+
+
+def _lung_from_mask(side: str, envelope: np.ndarray, smooth: np.ndarray) -> Optional[Lung]:
+    from scipy import ndimage
+
+    labels, count = ndimage.label(envelope)
+    if count == 0:
+        return None
+    sizes = ndimage.sum(envelope, labels, range(1, count + 1))
+    envelope = labels == (int(np.argmax(sizes)) + 1)
+    envelope = ndimage.binary_fill_holes(envelope)
+    values = smooth[envelope]
+    median = float(np.median(values))
+    spread = float(np.median(np.abs(values - median))) * 1.4826 + 1e-3
+    aerated = envelope & (smooth <= median + 2.0 * spread)
+    rows, cols = np.nonzero(envelope)
+    lung = Lung(side=side, aerated=aerated, envelope=envelope, filled=envelope,
+                top=int(rows.min()), bottom=int(rows.max()), area=int(aerated.sum()))
+    lung.lateral = int(cols.min()) if side == "right" else int(cols.max())
+    lung.medial = int(cols.max()) if side == "right" else int(cols.min())
+    return lung
+
+
+def from_masks(work: np.ndarray, right: np.ndarray, left: np.ndarray,
+               heart: Optional[np.ndarray] = None, source: str = "learned (PSPNet)") -> Anatomy:
+    """An :class:`Anatomy` from lung masks produced elsewhere (a learned segmenter).
+
+    ``right`` is the patient's right lung (image left). The aerated part of each
+    lung is what is not markedly denser than that lung's own median, so the
+    downstream density measures work the same way as with classical masks.
+    """
+    from scipy import ndimage
+
+    smooth = ndimage.gaussian_filter(work.astype(np.float32), 2.0)
+    content = smooth > 0.01
+    otsu = _otsu(smooth[content]) if content.any() else 0.5
+    body = ndimage.binary_fill_holes(smooth > otsu * 0.6) | right | left
+    anatomy = Anatomy(image=smooth, body=body, threshold=otsu, heart=heart, source=source)
+    for side, mask in (("right", right), ("left", left)):
+        lung = _lung_from_mask(side, mask.astype(bool), smooth) if mask is not None else None
+        if lung is None:
+            anatomy.notes.append(f"{side} lung field not identified")
+        else:
+            anatomy.lungs[side] = lung
+    return anatomy
+
+
+def plausible(anatomy: Anatomy) -> bool:
+    """Both lungs present, each a sensible size and height, on the correct side."""
+    if not anatomy.found:
+        return False
+    h, w = anatomy.image.shape
+    right, left = anatomy.lungs["right"], anatomy.lungs["left"]
+    return (right.envelope.sum() > 0.025 * h * w and left.envelope.sum() > 0.025 * h * w
+            and right.height > 0.25 * h and left.height > 0.25 * h
+            and np.mean(np.nonzero(right.envelope)[1]) < np.mean(np.nonzero(left.envelope)[1]))
 
 
 def segment(work: np.ndarray) -> Anatomy:
