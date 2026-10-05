@@ -30,7 +30,8 @@ python medscan.py                   # sign in: doctor / medscan   or   admin / t
 * `python -m msx.evaluation samples` benchmarks fixed vs adaptive routing.
 * `python tools/fetch_real_samples.py` downloads a small real chest X-ray check set (public COVID-19
   Image Data Collection) for `python -m msx.evaluation ~/.medscan/real_samples --engine hybrid`.
-* `python -m pytest tests` runs 40 tests.
+* `python -m pytest tests` runs 149 tests: unit, UI (offscreen) and functional; see
+  [`docs/testing/TEST_REPORT.md`](docs/testing/TEST_REPORT.md).
 
 On **Analyse**:
 1. Press **Load demo samples**, then **Analyse**. The samples are 25 synthetic
@@ -42,7 +43,7 @@ On **Analyse**:
 | Brief requirement | Where in MEDSCAN |
 |---|---|
 | **Adjust help to each doctor, without assuming ability** | **Doctor-chosen support modes** (Guided / Concise / Second opinion / Evidence-first), saved on the doctor's own account and switchable per case. They are never inferred from title or seniority |
-| **ML + DL + Generative AI** deliverable | **ML:** feedback-trained logistic stacker learning from doctors' decisions. **DL:** DenseNet-121 classifier and PSPNet lung/heart segmenter. **Generative AI:** fact-checked draft radiology report |
+| **ML + DL + Generative AI** deliverable | **ML:** feedback-trained logistic stacker learning from doctors' decisions. **DL:** DenseNet-121 classifier, PSPNet lung/heart segmenter, and a dataset model trained on your own labelled X-rays (transfer learning). **Generative AI:** fact-checked draft radiology report |
 | **Recommendation system** | Next-step engine: urgency tier, next test, follow-up, cross-finding patterns, confidence-aware |
 | **Doctor + AI vs either alone (simulation)** | Simulated readers (3 skills × 3 trust styles) with automation-bias and rescue-rate measures |
 | **Reduce bias** | Per-subgroup thresholds that close sensitivity gaps (before / after shown) |
@@ -81,6 +82,14 @@ One sign-in; the account decides the workspace.
     labelled folder; every run versioned with CV accuracy and Brier score, feature
     weights, one-click rollback; fit confidence calibration and fairness thresholds
     and apply them only when you choose.
+  * *Train on an image dataset*: point it at a labelled X-ray dataset (class
+    folders or the downloaded **.zip**, e.g. Kaggle's
+    [Lungs Disease Dataset (4 types)](https://www.kaggle.com/datasets/omkarmanohardalvi/lungs-disease-dataset-4-types)),
+    press **Inspect**, check what each class means, press **Train dataset model**.
+    A new classifier is trained on the DenseNet's image features (transfer
+    learning), versioned, and used by the hybrid engine as "dataset model"
+    evidence. **Build benchmark set from test split** sends the held-out images to
+    the Benchmark tab.
   * *Benchmark*: run fixed vs adaptive on any labelled folder (demo phantoms, the
     downloadable real set, or your own), keep every run, compare runs side by side
     with a Δ column, inspect per-image results (errors only), export CSV / JSON.
@@ -94,6 +103,7 @@ One sign-in; the account decides the workspace.
 | ![Simulation](docs/07b-simulation.png) | ![Bias and learning](docs/07c-bias-learning.png) |
 | ![Bias](docs/08-bias.png) | ![Audit](docs/09-audit.png) |
 | ![Model training](docs/12-model-training.png) | ![Benchmark](docs/13-benchmark.png) |
+| ![Train on an image dataset](docs/12b-dataset-training.png) | |
 
 ## Tech stack
 
@@ -128,6 +138,8 @@ msx/                  the analyser engine
   recommend.py        recommendation engine
   report.py           generative draft report (fact-checked)
   learner.py          feedback-trained ML model
+  datasets.py         import class-folder / .zip image datasets → labels.csv
+  deephead.py         dataset model: classifier head on DenseNet features
   simulation.py       Doctor + AI reader simulation
   knowledge.py        BM25 retrieval over knowledge/kb.json
   pipeline.py         the 8-stage AnalysisEngine

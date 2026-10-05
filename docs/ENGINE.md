@@ -212,6 +212,7 @@ problem statement.
 | Recommendations (deliverable) | `msx/recommend.py` | Urgency tier (Now / Same day / Within 1 week / Routine), next test, follow-up and referral. Adjusted for confidence (low → "confirm before acting"), nodule size (Fleischner bands), context (Emergency brings items forward) and **patterns across findings** (cardiomegaly + effusion → one heart-failure work-up) |
 | Generative AI (deliverable) | `msx/report.py` | A draft report (EXAMINATION / TECHNIQUE / FINDINGS / IMPRESSION / RECOMMENDATIONS) that the doctor edits and signs. A local LLM writes the prose when available; output is fact-checked against the findings; a grounded template is the fallback |
 | Machine learning (deliverable) and learning from doctors | `msx/learner.py` | A logistic-regression stacker trained on every finding's eventual verdict: ground truth, Accept / Reject / Correct, or Add (an AI miss). 5-fold cross-validated, blended into each finding with weight `min(0.5, n/200)`, retrained after every sign-off |
+| Deep learning on **your own image dataset** | `msx/datasets.py`, `msx/deephead.py` | Transfer learning. A labelled dataset (class folders or the downloaded .zip, e.g. Kaggle's *Lungs Disease Dataset (4 types)*) is mapped class → finding (pneumonia / COVID → Consolidation, Normal → No Finding, Tuberculosis skipped), sampled per class, passed through the frozen DenseNet-121 (1024 features per image), and a new one-vs-rest logistic classifier is trained on top, scored by 5-fold CV AUC / sensitivity / specificity and versioned. In the analyser it adds "dataset model" evidence in log-odds (weight 0.7) to the matching finding. It **only corroborates** (it can raise a probability that is already ≥ 0.35, and can always lower one), and abstains on images whose features are further than the training set's own 99th-percentile nearest-neighbour distance |
 | Robust anatomy on real films | `msx/screening.py` `LungSegmenter` | TorchXRayVision **PSPNet** lung and heart segmentation, used in hybrid mode as a **fallback** when classical segmentation fails (tightly cropped or post-processed films). The test-time-augmentation copies reuse the warped masks |
 | Test Doctor + AI vs either alone, with *simulations* | `msx/simulation.py` | Simulated readers: 3 skill levels × 3 trust styles (sceptical, calibrated, over-trusting) on the AI's real outputs. Reports accuracy for Doctor alone, AI alone and Doctor + AI, **automation bias** and **rescue rate**, with the AI as measured and degraded to 15 % error |
 | *Reduce* bias, not only monitor it | `msx/bias.py` `mitigate` | Per-subgroup operating thresholds (sex, age band). A threshold is only ever lowered, and only while specificity holds, to close a sensitivity gap. Before / after table on the Evaluation page; the analyser applies the thresholds |
@@ -283,5 +284,10 @@ NIH ChestX-ray14 validation folder with a `labels.csv`, using `--engine hybrid`.
   nodule search in particular is prone to vessel and rib false positives.
 * Lung segmentation is classical; heavily opaque lungs (white-out) fail the gate
   rather than being analysed.
+* The dataset model is only as good as its dataset. Many Kaggle sets are
+  augmented copies of a few thousand films, with the same patient in train and
+  test; trust the **test split** benchmark, not the cross-validation figure.
+  Its out-of-distribution guard catches very different images (noise, other
+  modalities) but rates the synthetic phantoms as plausible chest films.
 * The DenseNet has no laterality. Side comes from the measurements or the CAM.
 * Not a medical device; not validated for clinical use.

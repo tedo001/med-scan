@@ -6,7 +6,7 @@ import platform
 
 from PyQt6.QtWidgets import QHeaderView, QTableWidget, QTableWidgetItem
 
-from msx import __version__, screening
+from msx import __version__, deephead, screening
 from msx.router import CONTEXTS
 from msx.screening import CURVES
 
@@ -67,6 +67,12 @@ class EnginesPage(Page):
             ("5b Learning", "Feedback-trained logistic stacker (ML)",
              "trained" if self.services.learner.ready else "collecting feedback",
              f"{self.services.learner.info.get('n', 0)} labelled findings · blend weight {self.services.learner.weight:.2f}"),
+            ("5c Dataset model", "Transfer-learning head on DenseNet features (DL)",
+             "trained" if self.services.head.ready else "not trained",
+             (f"{self.services.head.info.get('n', 0)} images · labels "
+              + ", ".join(self.services.head.labels) + f" · weight {deephead.WEIGHT}, corroborates only"
+              + ("" if self.services.settings["engine"] == "hybrid" else " · needs the hybrid engine"))
+             if self.services.head.ready else "Model Training → Train on an image dataset"),
             ("6 Confidence", "calibration + TTA + abstention", "ready",
              "temperatures: " + (", ".join(f"{k}={v}" for k, v in self.services.settings["temperatures"].items()) or "none (T=1)")
              + " · subgroup thresholds: " + (", ".join(f"{k}={v}" for k, v in self.services.settings["subgroup_thresholds"].items()) or "none")),

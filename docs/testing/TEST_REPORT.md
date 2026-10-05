@@ -3,7 +3,7 @@
 **Date:** 05 Oct 2026 · **Branch:** `tedo` · **Python** 3.11 · **PyQt6** offscreen (`QT_QPA_PLATFORM=offscreen`)
 
 ```
-python -m pytest tests                    # everything (≈ 7 min)
+python -m pytest tests                    # everything (≈ 14 min)
 python -m pytest tests/gui                # UI tests
 python -m pytest tests/functional         # functional / end-to-end tests
 MEDSCAN_UI_SHOTS=out python -m pytest tests/gui -k visual_sweep   # keep the page renders
@@ -14,11 +14,36 @@ MEDSCAN_UI_SHOTS=out python -m pytest tests/gui -k visual_sweep   # keep the pag
 | Suite | Tests | Passed | Failed |
 |---|---|---|---|
 | Original unit tests (`tests/test_*.py`) | 40 | 40 | 0 |
-| **UI tests** (`tests/gui`) | 70 | 70 | 0 |
-| **Functional tests** (`tests/functional`) | 21 | 21 | 0 |
-| **Total** | **131** | **131** | **0** |
+| **UI tests** (`tests/gui`) | 75 | 75 | 0 |
+| **Functional tests** (`tests/functional`) | 34 | 34 | 0 |
+| **Total** | **149** | **149** | **0** |
 
-The 11 newest UI tests cover the **Model Training** and **Benchmark** admin pages:
+The newest tests cover **training on an image dataset** (Model Training →
+"Train on an image dataset", e.g. Kaggle's *Lungs Disease Dataset (4 types)*):
+
+* 7 UI tests: Inspect a class-folder dataset and a downloaded .zip (classes, splits,
+  default mapping with Tuberculosis skipped); the **Train dataset model** button
+  trains, versions, rolls back and deactivates the model, and the analyser is
+  rebuilt with it; **Build benchmark set from test split** preselects the held-out
+  images on the Benchmark page; refusals (nothing inspected, every class Skip, no
+  PyTorch); a bad path fails cleanly; folder / .zip pickers; the Engines row.
+  These use a small stand-in feature extractor, so they need no PyTorch.
+* 11 functional tests: class-name mapping; folder and .zip give the same
+  inventory; balanced, seeded, split-respecting manifests; only sampled zip
+  members are extracted; clear errors; the model trains, predicts, persists,
+  rolls back and **abstains on out-of-distribution input**; it refuses too little
+  data; it **only corroborates** (never creates a finding); with no dataset model
+  the analysis is **identical to before**; and end-to-end with the real DenseNet.
+
+**No change to the original behaviour.** With no dataset model trained the
+analyser is unchanged (tested). With a model trained on 40 real chest films
+(Kaggle-style class folders) active in hybrid mode, all 24 demo phantoms give the
+**same calls as before** (checked image by image), and on 10 held-out real films
+Consolidation AUC went **0.875 → 1.0** (a very small check). A first version let
+the model create one false finding on a phantom; it now only corroborates, which
+removed it.
+
+The 11 UI tests before them cover the **Model Training** and **Benchmark** admin pages:
 
 * training from a labelled folder, versioned runs, rollback, deactivate, feature weights;
 * refusal with no data source, the "need ≥ 20 findings" message, a missing labels.csv;

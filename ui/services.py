@@ -10,6 +10,7 @@ from msx import accounts as accounts_mod, explain, prefs, screening
 from msx.audit import AuditLog
 from msx.datastore import DataStore
 from msx.knowledge import default_kb
+from msx.deephead import DatasetHead
 from msx.learner import Learner
 from msx.pipeline import AnalysisEngine
 
@@ -18,6 +19,7 @@ class Services(QObject):
     studies_changed = pyqtSignal()
     settings_changed = pyqtSignal()
     open_study = pyqtSignal(str)
+    benchmark_folder = pyqtSignal(str)       # Model Training → Benchmark: a test set to run
 
     def __init__(self, store: Optional[DataStore] = None, audit: Optional[AuditLog] = None,
                  accounts: Optional[accounts_mod.Accounts] = None):
@@ -30,6 +32,7 @@ class Services(QObject):
         self.user: Optional[accounts_mod.Account] = None
         self._engine: Optional[AnalysisEngine] = None
         self.learner = Learner()
+        self.head = DatasetHead()           # dataset model trained on an image dataset
 
     # -- the engine is rebuilt when settings change --------------------------
     @property
@@ -47,7 +50,7 @@ class Services(QObject):
                                           narrator=self.narrator,
                                           positive_at=float(s["positive_at"]),
                                           subgroup_thresholds=s["subgroup_thresholds"],
-                                          learner=self.learner)
+                                          learner=self.learner, head=self.head)
         return self._engine
 
     def save_settings(self) -> None:

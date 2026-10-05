@@ -244,6 +244,23 @@ def screenshots(folder: str) -> int:
         _json.dump(dict(report, run_at="2026-10-05T09:00:00"), handle)
     admin.show_page("Model Training")
     grab(admin, "12-model-training.png")
+    import shutil as _shutil
+    import tempfile as _tempfile
+
+    from msx import datasets as _datasets, paths
+
+    demo = os.path.join(_tempfile.mkdtemp(prefix="medscan-dataset-"), "Lung Disease Dataset")
+    for split, count in (("train", 3), ("val", 1), ("test", 2)):
+        for cls, src in (("Normal", "cxr_01_normal.png"), ("Bacterial Pneumonia", "cxr_13_consolidation.png"),
+                         ("Viral Pneumonia", "cxr_14_consolidation.png"), ("Tuberculosis", "cxr_18_nodule.png")):
+            os.makedirs(os.path.join(demo, split, cls), exist_ok=True)
+            for i in range(count):
+                _shutil.copy(os.path.join(paths.SAMPLES_DIR, src), os.path.join(demo, split, cls, f"{i}.png"))
+    training = admin.pages["Model Training"]
+    training.ds_source.setText(demo)
+    training._inspected(_datasets.inspect(demo))
+    training.scroll.verticalScrollBar().setValue(training.ds_card.y() - 10)
+    grab(admin, "12b-dataset-training.png")
     admin.show_page("Benchmark")
     grab(admin, "13-benchmark.png")
     bench_page = admin.pages["Benchmark"]

@@ -87,6 +87,7 @@ class BenchmarkPage(Page):
         self.sim_runs.setRange(0, 1000)
         self.sim_runs.setValue(200)
         self.run_button = button("Run benchmark", "Primary", self._run)
+        services.benchmark_folder.connect(self._use_folder)
         self.fetch_button = button("Fetch real samples", "", self._fetch,
                                    tip="Download 50 public chest X-rays (COVID-19 Image Data Collection)")
         config.body.addLayout(hbox(label("Folder", "Small"), self.folder, button("…", "", self._choose),
@@ -164,6 +165,12 @@ class BenchmarkPage(Page):
         self.body.addStretch(1)
 
     # ------------------------------------------------------------- run -------
+    def _use_folder(self, folder: str) -> None:
+        """A test set built on Model Training: preselect it (hybrid, the dataset model needs DenseNet)."""
+        self.folder.setText(folder)
+        self.engine.setCurrentText("hybrid")
+        self.status.setText(f"Test set from Model Training: {folder}")
+
     def _choose(self) -> None:
         folder = QFileDialog.getExistingDirectory(self, "Labelled image folder", self.folder.text())
         if folder:

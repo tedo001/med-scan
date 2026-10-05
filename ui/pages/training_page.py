@@ -7,7 +7,11 @@ Admin workspace. Three things are trained here:
   run is versioned, the active one can be rolled back;
 * **confidence calibration** - per-group temperatures fitted on a labelled folder;
 * **fairness thresholds** - per-subgroup operating points that close sensitivity
-  gaps (:func:`msx.bias.mitigate`).
+  gaps (:func:`msx.bias.mitigate`);
+* the **dataset model** (:mod:`msx.deephead`) - a new classifier on the DenseNet's
+  image features, trained on a labelled image dataset such as Kaggle's "Lungs
+  Disease Dataset (4 types)": class folders or the downloaded .zip
+  (:mod:`msx.datasets`). Versioned and rollback-able like the feedback model.
 
 Everything long runs in the background with progress and a log; nothing is
 applied to the analyser until the admin presses an Apply / Activate button.
@@ -19,10 +23,10 @@ import os
 from datetime import datetime
 
 from PyQt6.QtWidgets import (QCheckBox, QComboBox, QDoubleSpinBox, QFileDialog, QGridLayout,
-                             QHeaderView, QLineEdit, QPlainTextEdit, QProgressBar, QTableWidget,
-                             QTableWidgetItem)
+                             QHeaderView, QLineEdit, QPlainTextEdit, QProgressBar, QSpinBox,
+                             QTableWidget, QTableWidgetItem)
 
-from msx import bias, evaluation, paths, uncertainty
+from msx import bias, datasets, deephead, evaluation, paths, screening, uncertainty
 from msx.learner import MIN_SAMPLES, collect, collect_analyses
 
 from .. import theme
@@ -45,11 +49,14 @@ def real_samples_folder() -> str:
 
 class TrainingPage(Page):
     def __init__(self, services):
-        super().__init__("Model Training", "feedback model (ML) · confidence calibration · "
-                                           "fairness thresholds — versioned, applied only on your say")
+        super().__init__("Model Training", "feedback model (ML) · dataset model (DL) · confidence "
+                                           "calibration · fairness thresholds — versioned, applied only on your say")
         self.services = services
         self.job = None
         self.fit = None                     # last calibration / fairness fit
+        self.dataset = None                 # last inspected msx.datasets.DatasetInfo
+        self.split_boxes = {}
+        self.map_boxes = {}
         self.train_button = self.add_action(button("Train feedback model", "Primary", self._train))
 
         top = QGridLayout()
@@ -96,6 +103,74 @@ class TrainingPage(Page):
         top.setColumnStretch(0, 3)
         top.setColumnStretch(1, 2)
         self.body.addLayout(top)
+
+        image = QGridLayout()
+        image.setSpacing(12)
+        ds = Card("Train on an image dataset", "class folders or a downloaded .zip (e.g. Kaggle "
+                  "Lungs Disease Dataset) · DenseNet features → new classifier",
+                  right=None)
+        self.head_button = button("Train dataset model", "Primary", self._train_head)
+        self.ds_source = QLineEdit()
+        self.ds_source.setPlaceholderText("dataset folder or .zip  (…/<split>/<class>/<image>)")
+        self.ds_inspect = button("Inspect", "", self._inspect)
+        ds.body.addLayout(hbox(self.ds_source, button("Folder…", "", self._choose_ds_folder),
+                               button(".zip…", "", self._choose_ds_zip), self.ds_inspect))
+        self.ds_summary = label("Inspect a dataset to see its classes and choose what each one means.",
+                                "Faint", wrap=True)
+        ds.body.addWidget(self.ds_summary)
+        self.classes = QTableWidget(0, 3)
+        self.classes.setHorizontalHeaderLabels(["Class (folder)", "Images per split", "Train as"])
+        self.classes.verticalHeader().setVisible(False)
+        self.classes.verticalHeader().setDefaultSectionSize(38)
+        self.classes.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.classes.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.Stretch)
+        self.classes.setMinimumHeight(190)
+        ds.body.addWidget(self.classes)
+        self.splits_row = hbox(label("Train on splits", "Small"))
+        self.splits_row.addStretch(1)
+        ds.body.addLayout(self.splits_row)
+        self.per_class = QSpinBox()
+        self.per_class.setRange(10, 5000)
+        self.per_class.setSingleStep(50)
+        self.per_class.setValue(150)
+        self.per_class.setToolTip("Images sampled per class (balanced). ~1 s per image on a CPU.")
+        self.ds_note = QLineEdit()
+        self.ds_note.setPlaceholderText("note for this run (optional)")
+        ds.body.addLayout(hbox(label("Images per class", "Small"), self.per_class, self.ds_note,
+                               self.head_button))
+        self.test_button = button("Build benchmark set from test split", "", self._build_test)
+        self.test_button.setEnabled(False)
+        ds.body.addLayout(hbox(label("Tuberculosis has no MEDSCAN finding and is skipped by default. "
+                                     "Augmented datasets repeat images across classes and splits: "
+                                     "judge the model on the test split.", "Faint", wrap=True),
+                               self.test_button))
+        image.addWidget(ds, 0, 0)
+        self.ds_card = ds
+
+        head = Card("Dataset model", right=button("Deactivate", "", self._deactivate_head))
+        self.head_stats = StatStrip([("Trained", "—", ""), ("Images", "0", ""),
+                                     ("CV AUC", "—", "5-fold"), ("Sensitivity", "—", "CV, at 0.5"),
+                                     ("Specificity", "—", "CV, at 0.5")])
+        head.body.addWidget(self.head_stats)
+        self.head_runs = QTableWidget(0, 6)
+        self.head_runs.setHorizontalHeaderLabels(["Version", "Source", "n", "Labels", "CV AUC", "Active"])
+        self.head_runs.verticalHeader().setVisible(False)
+        self.head_runs.setSelectionBehavior(QTableWidget.SelectionBehavior.SelectRows)
+        self.head_runs.setEditTriggers(QTableWidget.EditTrigger.NoEditTriggers)
+        self.head_runs.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
+        self.head_runs.horizontalHeader().setSectionResizeMode(1, QHeaderView.ResizeMode.Stretch)
+        self.head_runs.setMinimumHeight(150)
+        head.body.addWidget(self.head_runs)
+        head.body.addLayout(hbox(label(f"Adds 'dataset model' evidence (log-odds weight {deephead.WEIGHT}) "
+                                       "to matching findings. It only corroborates: it can raise a "
+                                       f"probability already ≥ {deephead.CORROBORATE}, and abstains on "
+                                       "images unlike its training data. Needs the hybrid engine.",
+                                       "Faint", wrap=True),
+                                 button("Activate selected", "Primary", self._activate_head)))
+        image.addWidget(head, 0, 1)
+        image.setColumnStretch(0, 3)
+        image.setColumnStretch(1, 2)
+        self.body.addLayout(image)
 
         mid = QGridLayout()
         mid.setSpacing(12)
@@ -153,7 +228,7 @@ class TrainingPage(Page):
 
     def _busy(self, on: bool) -> None:
         self.progress.setVisible(on)
-        for b in (self.train_button,):
+        for b in (self.train_button, self.head_button, self.ds_inspect):
             b.setEnabled(not on)
 
     def _run(self, fn, done, title: str) -> None:
@@ -233,6 +308,142 @@ class TrainingPage(Page):
         self.services._engine = None
         self.services.log("feedback model deactivated", category="system")
         self._say("feedback model deactivated - analyser uses measurements + deep model only")
+        self.refresh()
+
+    # -------------------------------------------------- image dataset -------
+    def _choose_ds_folder(self) -> None:
+        folder = QFileDialog.getExistingDirectory(self, "Dataset folder", self.ds_source.text())
+        if folder:
+            self.ds_source.setText(folder)
+            self._inspect()
+
+    def _choose_ds_zip(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Dataset .zip", self.ds_source.text(), "Zip (*.zip)")
+        if path:
+            self.ds_source.setText(path)
+            self._inspect()
+
+    def _inspect(self) -> None:
+        source = self.ds_source.text().strip()
+        if not source:
+            self.ds_summary.setText("Choose a dataset folder or .zip first.")
+            return
+        self._run(lambda progress: datasets.inspect(source, progress), self._inspected,
+                  f"inspecting {source}")
+
+    def _inspected(self, info) -> None:
+        self.dataset = info
+        mapping = info.mapping()
+        self.classes.setRowCount(len(info.classes))
+        self.map_boxes = {}
+        for r, cls in enumerate(sorted(info.classes)):
+            counts = info.classes[cls]
+            self.classes.setItem(r, 0, QTableWidgetItem(cls))
+            self.classes.setItem(r, 1, QTableWidgetItem(
+                " · ".join(f"{s} {counts[s]}" for s in sorted(counts))))
+            combo = QComboBox()
+            combo.addItems(datasets.TARGETS)
+            combo.setCurrentText(mapping[cls])
+            self.classes.setCellWidget(r, 2, combo)
+            self.map_boxes[cls] = combo
+        self.classes.setMinimumHeight(60 + 38 * max(1, len(info.classes)))
+        while self.splits_row.count() > 2:                 # keep the label and the stretch
+            item = self.splits_row.takeAt(1)
+            if item.widget():
+                item.widget().deleteLater()
+        self.split_boxes = {}
+        for split in info.splits:
+            box = QCheckBox(split)
+            box.setChecked(split != "test" or info.splits == ["test"])
+            self.splits_row.insertWidget(self.splits_row.count() - 1, box)
+            self.split_boxes[split] = box
+        self.test_button.setEnabled("test" in info.splits)
+        self.ds_summary.setText(f"{info.total} images · {len(info.classes)} classes · splits "
+                                f"{', '.join(info.splits)} · {info.kind}")
+        self._say(f"inspected {info.source}: {info.total} images, classes "
+                  + ", ".join(f"{c} → {mapping[c]}" for c in sorted(info.classes)))
+
+    def _mapping(self):
+        return {cls: box.currentText() for cls, box in self.map_boxes.items()}
+
+    def _dataset_name(self, suffix: str) -> str:
+        base = os.path.splitext(os.path.basename(self.dataset.source.rstrip("/\\")))[0] or "dataset"
+        return f"{base}_{suffix}"
+
+    def _train_head(self) -> None:
+        if self.dataset is None:
+            self.status.setText("Inspect an image dataset first (Train on an image dataset).")
+            self.ds_summary.setText("Inspect an image dataset first.")
+            return
+        if not screening.deep_available():
+            self.ds_summary.setText("The dataset model needs PyTorch and TorchXRayVision "
+                                    "(pip install -r requirements.txt).")
+            return
+        splits = [s for s, box in self.split_boxes.items() if box.isChecked()]
+        mapping = self._mapping()
+        labels = {l for l in mapping.values() if l != datasets.SKIP}
+        if not splits or len(labels) < 2:
+            self.ds_summary.setText("Choose at least one split and map at least two classes "
+                                    "(e.g. a finding and No Finding).")
+            return
+        info, per_class, note = self.dataset, self.per_class.value(), self.ds_note.text().strip()
+        head, name = self.services.head, self._dataset_name("train")
+
+        def work(progress):
+            folder = datasets.build_manifest(info, mapping, splits, per_class, name,
+                                             progress=lambda d, t, m: progress(d, t, "sampling " + m))
+            deep = screening.get_deep()
+            if deep is None:
+                raise RuntimeError("the DenseNet could not be loaded (weights download needs internet once)")
+            X, y, _ = deephead.embed_folder(folder, deep, progress)
+            progress(1, 1, "training classifier (5-fold cross-validation)")
+            return head.train(X, y, note=note, source=f"{os.path.basename(info.source)} · "
+                                                      f"{'+'.join(splits)} · {per_class}/class")
+
+        self._run(work, self._head_trained, f"training dataset model on {info.source}")
+
+    def _head_trained(self, info) -> None:
+        self.services._engine = None
+        self.services.log("dataset model trained", {k: info.get(k) for k in
+                                                    ("version", "n", "classes", "per_label", "source",
+                                                     "status")}, category="system")
+        self.status.setText(str(info.get("status")))
+        per = "; ".join(f"{l}: AUC {_f(v.get('cv_auc'))}, sens {_f(v.get('cv_sensitivity'))}, "
+                        f"spec {_f(v.get('cv_specificity'))}" for l, v in info.get("per_label", {}).items())
+        self._say(f"dataset model {info.get('status')} · n={info.get('n')} · {per} · {info.get('version', '')}")
+        self.refresh()
+
+    def _build_test(self) -> None:
+        if self.dataset is None:
+            return
+        info, mapping = self.dataset, self._mapping()
+        per_class, name = self.per_class.value(), self._dataset_name("test")
+
+        def work(progress):
+            return datasets.build_manifest(info, mapping, ["test"], per_class, name, progress=progress)
+
+        def done(folder):
+            self._say(f"benchmark set written: {folder} - preselected on the Benchmark page")
+            self.services.benchmark_folder.emit(folder)
+
+        self._run(work, done, "building benchmark set from the test split")
+
+    def _activate_head(self) -> None:
+        row = self.head_runs.currentRow()
+        if row < 0:
+            return
+        version = self.head_runs.item(row, 0).text()
+        self.services.head.activate(version)
+        self.services._engine = None
+        self.services.log("dataset model activated", {"version": version}, category="system")
+        self._say(f"dataset model {version} activated")
+        self.refresh()
+
+    def _deactivate_head(self) -> None:
+        self.services.head.reset()
+        self.services._engine = None
+        self.services.log("dataset model deactivated", category="system")
+        self._say("dataset model deactivated")
         self.refresh()
 
     # -------------------------------------------------- calibration / bias ---
@@ -337,3 +548,27 @@ class TrainingPage(Page):
         self.weights.set([(f"{FEATURE_NAMES.get(n, n.replace('label=', ''))} {'+' if w >= 0 else '−'}", abs(w))
                           for n, w in coefficients],
                          [theme.NAVY if w >= 0 else theme.RED for _, w in coefficients])
+        self._refresh_head()
+
+    def _refresh_head(self) -> None:
+        head = self.services.head
+        info = head.info if head.ready else {}
+        per = list((info.get("per_label") or {}).values())
+        mean = lambda key: (sum(v[key] for v in per if v.get(key) is not None) / len(per)  # noqa: E731
+                            if per and any(v.get(key) is not None for v in per) else None)
+        self.head_stats.set(0, (info.get("trained_at", "") or "")[5:16].replace("T", " ") if info else "—",
+                            info.get("version", "") if info else "")
+        self.head_stats.set(1, str(info.get("n", 0)) if info else "0",
+                            ", ".join(sorted(info.get("per_label", {}))) if info else "")
+        self.head_stats.set(2, _f(mean("cv_auc")) if info else "—")
+        self.head_stats.set(3, _f(mean("cv_sensitivity")) if info else "—")
+        self.head_stats.set(4, _f(mean("cv_specificity")) if info else "—")
+        history = head.history()
+        self.head_runs.setRowCount(len(history))
+        for r, run in enumerate(history):
+            aucs = ", ".join(f"{_f(v.get('cv_auc'))}" for v in (run.get("per_label") or {}).values())
+            values = (run.get("version", ""), (run.get("source", "") or "") +
+                      (f" · {run['note']}" if run.get("note") else ""), str(run.get("n", 0)),
+                      ", ".join(sorted(run.get("per_label") or {})), aucs, "✓" if run.get("active") else "")
+            for c, v in enumerate(values):
+                self.head_runs.setItem(r, c, QTableWidgetItem(v))
