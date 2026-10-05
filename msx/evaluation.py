@@ -87,7 +87,8 @@ def _label_positive(analysis, label: str) -> int:
 
 def benchmark(folder: str, engine: str = "builtin", context: str = "Routine OPD",
               modes: Sequence[str] = ("fixed", "adaptive"), progress=None,
-              simulate_runs: int = 200, analyser: Optional[AnalysisEngine] = None) -> Dict[str, object]:
+              simulate_runs: int = 200, analyser: Optional[AnalysisEngine] = None,
+              keep_analyses: Optional[list] = None) -> Dict[str, object]:
     """Analyse every labelled image per mode and score it; adds the reader simulation."""
     from . import simulation
 
@@ -122,7 +123,12 @@ def benchmark(folder: str, engine: str = "builtin", context: str = "Routine OPD"
             report["records"] = [
                 {"file": r["file"], "sex": a.scan.get("sex", ""), "age_band": a.scan.get("age_band", ""),
                  "truth": sorted(r["truth"]), "held": a.status == "quality-hold",
-                 "scores": {l: _label_score(a, l) for l in EVAL_LABELS}} for r, a, _ in results]
+                 "status": a.status, "ms": round(ms, 1), "modules": a.modules_activated,
+                 "calls": a.model_calls,
+                 "called": sorted({f.label for f in a.findings if f.status == POSITIVE}),
+                 "scores": {l: _label_score(a, l) for l in EVAL_LABELS}} for r, a, ms in results]
+            if keep_analyses is not None:
+                keep_analyses.extend((a, r["truth"]) for r, a, _ in results)
     if "fixed" in report["modes"] and "adaptive" in report["modes"]:
         f, a = report["modes"]["fixed"], report["modes"]["adaptive"]
         report["comparison"] = {

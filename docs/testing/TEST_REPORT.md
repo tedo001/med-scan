@@ -14,9 +14,18 @@ MEDSCAN_UI_SHOTS=out python -m pytest tests/gui -k visual_sweep   # keep the pag
 | Suite | Tests | Passed | Failed |
 |---|---|---|---|
 | Original unit tests (`tests/test_*.py`) | 40 | 40 | 0 |
-| **UI tests** (`tests/gui`) | 59 | 59 | 0 |
+| **UI tests** (`tests/gui`) | 70 | 70 | 0 |
 | **Functional tests** (`tests/functional`) | 21 | 21 | 0 |
-| **Total** | **120** | **120** | **0** |
+| **Total** | **131** | **131** | **0** |
+
+The 11 newest UI tests cover the **Model Training** and **Benchmark** admin pages:
+
+* training from a labelled folder, versioned runs, rollback, deactivate, feature weights;
+* refusal with no data source, the "need ≥ 20 findings" message, a missing labels.csv;
+* fitting and applying calibration and fairness thresholds;
+* benchmark runs saved and shown, comparison Δ between two runs, validation messages;
+* CSV / JSON export and delete; the Evaluation page reading the same runs;
+* Engines-page shortcuts to both new pages.
 
 The machine-readable results are in `docs/testing/junit.xml`.
 

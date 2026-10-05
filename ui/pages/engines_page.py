@@ -24,6 +24,9 @@ class EnginesPage(Page):
     def __init__(self, services):
         super().__init__("Engines", f"MEDSCAN {__version__} · Python {platform.python_version()}")
         self.services = services
+        self.navigate_to = None
+        self.add_action(button("Model Training", "", lambda: self._go("Model Training")))
+        self.add_action(button("Benchmark", "", lambda: self._go("Benchmark")))
         self.add_action(button("Load DenseNet now", "Primary", self._load))
         self.status = Card("Stages")
         self.body.addWidget(self.status)
@@ -34,6 +37,11 @@ class EnginesPage(Page):
         self.stack = Card("Software stack")
         self.body.addWidget(self.stack)
         self.body.addStretch(1)
+
+    def _go(self, name):
+        window = self.window()
+        if hasattr(window, "show_page"):
+            window.show_page(name)
 
     def _load(self):
         deep = screening.get_deep()
@@ -48,7 +56,7 @@ class EnginesPage(Page):
             ("1 Preprocess", "OpenCV + pydicom", "ready", "letterbox 512², DICOM de-identification, classical lung segmentation"),
             ("1 Preprocess", "PSPNet lung + heart segmenter (TorchXRayVision)",
              "loaded" if screening._SEG is not None else "available" if deep_ok else "not installed",
-             "hybrid mode: learned masks first, classical fallback when implausible"),
+             "hybrid mode: fallback when classical segmentation fails"),
             ("2 Quality", "built-in", "ready", "7 checks: resolution, sharpness, contrast, exposure, lung fields, coverage, symmetry"),
             ("3 Screen", "built-in measurements", "ready", "CTR, lung asymmetry, CP blunting, zone density, lucency, coarse LoG"),
             ("3 Screen", "DenseNet-121 (TorchXRayVision, densenet121-res224-all)",
@@ -74,6 +82,7 @@ class EnginesPage(Page):
         table = QTableWidget(len(rows), 4)
         table.setHorizontalHeaderLabels(["Stage", "Engine", "State", "Detail"])
         table.verticalHeader().setVisible(False)
+        table.horizontalHeader().setSectionResizeMode(QHeaderView.ResizeMode.ResizeToContents)
         table.horizontalHeader().setSectionResizeMode(3, QHeaderView.ResizeMode.Stretch)
         for r, row in enumerate(rows):
             for c, v in enumerate(row):

@@ -75,8 +75,15 @@ sensitivity or specificity** (synthetic data; see the caveat in ENGINE.md).
 One sign-in; the account decides the workspace.
 
 * **Clinical** (doctor / medscan): Home, Analyse, Review, Dashboard, Evaluation.
-* **Administration** (admin / techgium): Dashboard, Bias Monitor, Audit Trail,
-  Engines, Accounts, Settings.
+* **Administration** (admin / techgium): Dashboard, Bias Monitor, **Model Training**,
+  **Benchmark**, Audit Trail, Engines, Accounts, Settings.
+  * *Model Training*: train the feedback model from doctors' decisions and / or a
+    labelled folder; every run versioned with CV accuracy and Brier score, feature
+    weights, one-click rollback; fit confidence calibration and fairness thresholds
+    and apply them only when you choose.
+  * *Benchmark*: run fixed vs adaptive on any labelled folder (demo phantoms, the
+    downloadable real set, or your own), keep every run, compare runs side by side
+    with a Δ column, inspect per-image results (errors only), export CSV / JSON.
 
 | | |
 |---|---|
@@ -86,6 +93,7 @@ One sign-in; the account decides the workspace.
 | ![Guided mode](docs/05b-review-guided.png) | ![Report](docs/05c-review-report.png) |
 | ![Simulation](docs/07b-simulation.png) | ![Bias and learning](docs/07c-bias-learning.png) |
 | ![Bias](docs/08-bias.png) | ![Audit](docs/09-audit.png) |
+| ![Model training](docs/12-model-training.png) | ![Benchmark](docs/13-benchmark.png) |
 
 ## Tech stack
 

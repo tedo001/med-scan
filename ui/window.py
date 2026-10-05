@@ -16,7 +16,8 @@ from .components import button, hbox, label, logo_pixmap, vbox
 from .services import Services
 
 CLINICIAN_TABS = ("Home", "Analyse", "Review", "Dashboard", "Evaluation")
-ADMIN_TABS = ("Dashboard", "Bias Monitor", "Audit Trail", "Engines", "Accounts", "Settings")
+ADMIN_TABS = ("Dashboard", "Bias Monitor", "Model Training", "Benchmark", "Audit Trail", "Engines",
+              "Accounts", "Settings")
 
 
 class MainWindow(QMainWindow):
@@ -153,13 +154,16 @@ class MainWindow(QMainWindow):
         return frame
 
     def _make_page(self, name: str) -> QWidget:
-        from .pages import (accounts_page, analyse, audit_page, bias_page, dashboard,
-                            engines_page, evaluation_page, home, review, settings_page)
+        from .pages import (accounts_page, analyse, audit_page, benchmark_page, bias_page, dashboard,
+                            engines_page, evaluation_page, home, review, settings_page,
+                            training_page)
 
         factory = {"Home": home.HomePage, "Analyse": analyse.AnalysePage,
                    "Review": review.ReviewPage, "Dashboard": dashboard.DashboardPage,
                    "Evaluation": evaluation_page.EvaluationPage,
                    "Bias Monitor": bias_page.BiasPage, "Audit Trail": audit_page.AuditPage,
+                   "Model Training": training_page.TrainingPage,
+                   "Benchmark": benchmark_page.BenchmarkPage,
                    "Engines": engines_page.EnginesPage, "Accounts": accounts_page.AccountsPage,
                    "Settings": settings_page.SettingsPage}[name]
         page = factory(self.services)

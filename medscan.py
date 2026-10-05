@@ -236,6 +236,19 @@ def screenshots(folder: str) -> int:
                        ("Engines", "10-engines.png"), ("Settings", "11-settings.png")):
         admin.show_page(page)
         grab(admin, name)
+    import json as _json
+
+    from ui.pages.benchmark_page import runs_folder
+
+    with open(os.path.join(runs_folder(), "benchmark_20261005_090000.json"), "w") as handle:
+        _json.dump(dict(report, run_at="2026-10-05T09:00:00"), handle)
+    admin.show_page("Model Training")
+    grab(admin, "12-model-training.png")
+    admin.show_page("Benchmark")
+    grab(admin, "13-benchmark.png")
+    bench_page = admin.pages["Benchmark"]
+    bench_page.scroll.verticalScrollBar().setValue(bench_page.table.parentWidget().y() - 10)
+    grab(admin, "13b-benchmark-images.png")
     return 0
 
 

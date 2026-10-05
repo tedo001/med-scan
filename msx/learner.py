@@ -27,6 +27,7 @@ retrained after every sign-off and from the Evaluation page.
 
 from __future__ import annotations
 
+import glob
 import json
 import math
 import os
@@ -37,7 +38,7 @@ import numpy as np
 
 from . import paths
 
-__all__ = ["Learner", "features", "collect", "LABELS", "MIN_SAMPLES"]
+__all__ = ["Learner", "features", "collect", "collect_analyses", "LABELS", "MIN_SAMPLES"]
 
 LABELS = ("Cardiomegaly", "Effusion", "Pneumothorax", "Consolidation", "Nodule", "Mass",
           "Atelectasis", "Edema")
@@ -67,6 +68,24 @@ def features(finding: Dict[str, object], quality_score: float, view: str) -> np.
                quality_score / 100.0, 1.0 if view == "AP" else 0.0]
     onehot = [1.0 if finding.get("label") == l else 0.0 for l in LABELS]
     return np.array(numeric + onehot, dtype=np.float64)
+
+
+def collect_analyses(pairs, source: str = "labelled folder") -> Tuple[np.ndarray, np.ndarray, List[str]]:
+    """(X, y, sources) from [(analysis, truth label set)] - e.g. a labelled image folder."""
+    X, y = [], []
+    for analysis, truth in pairs:
+        if analysis.status == "quality-hold":
+            continue
+        quality = float(analysis.quality.get("score", 100))
+        view = analysis.scan.get("view", "PA")
+        for f in analysis.findings:
+            if f.label not in LABELS:
+                continue
+            X.append(features(f.to_dict(), quality, view))
+            y.append(int(f.label in truth))
+    if not X:
+        return np.zeros((0, len(NUMERIC) + len(LABELS))), np.zeros(0), []
+    return np.vstack(X), np.array(y, dtype=np.float64), [source] * len(y)
 
 
 def collect(store) -> Tuple[np.ndarray, np.ndarray, List[str]]:
@@ -147,14 +166,40 @@ class Learner:
         except (OSError, ValueError, KeyError):
             self.weights, self.info = None, {}
 
-    def train(self, store) -> Dict[str, object]:
-        X, y, why = collect(store)
+    # -- training ----------------------------------------------------------
+    @property
+    def history_dir(self) -> str:
+        folder = os.path.join(os.path.dirname(self.path), "learner_runs")
+        os.makedirs(folder, exist_ok=True)
+        return folder
+
+    def train(self, store=None, extra: Optional[Tuple[np.ndarray, np.ndarray, List[str]]] = None,
+              l2: float = 0.05, note: str = "") -> Dict[str, object]:
+        """Fit on the database's labelled findings and/or ``extra`` (X, y, sources).
+
+        Every successful run is kept as a version under ``learner_runs/`` (with its
+        weights, cross-validated scores and data sources) and becomes the active
+        model; :meth:`activate` rolls back to any earlier version.
+        """
+        parts = []
+        if store is not None:
+            parts.append(collect(store))
+        if extra is not None:
+            parts.append(extra)
+        parts = [p for p in parts if len(p[1])]
+        if parts:
+            X = np.vstack([p[0] for p in parts])
+            y = np.concatenate([p[1] for p in parts])
+            why = [w for p in parts for w in p[2]]
+        else:
+            X, y, why = np.zeros((0, len(NUMERIC) + len(LABELS))), np.zeros(0), []
         info: Dict[str, object] = {"n": int(len(y)), "positives": int(y.sum()) if len(y) else 0,
                                    "trained_at": datetime.now().isoformat(timespec="seconds"),
-                                   "sources": {s: why.count(s) for s in set(why)}}
+                                   "sources": {s: why.count(s) for s in set(why)}, "l2": l2,
+                                   "note": note}
         if len(y) < MIN_SAMPLES or len(set(y.tolist())) < 2:
             info["status"] = f"need ≥ {MIN_SAMPLES} labelled findings with both outcomes (have {len(y)})"
-            self.info = info
+            self.info = info if self.weights is None else dict(self.info, last_attempt=info)
             return info
         # 5-fold cross-validated accuracy, then the final fit on everything
         rng = np.random.default_rng(0)
@@ -163,18 +208,61 @@ class Learner:
         correct, brier = 0, 0.0
         for fold in folds:
             train = np.setdiff1d(order, fold)
-            w = _fit(X[train], y[train])
+            w = _fit(X[train], y[train], l2=l2)
             p = _predict(w, X[fold])
             correct += int(((p >= 0.5) == (y[fold] == 1)).sum())
             brier += float(((p - y[fold]) ** 2).sum())
-        self.weights = _fit(X, y)
+        self.weights = _fit(X, y, l2=l2)
+        version = datetime.now().strftime("v%Y%m%d-%H%M%S-%f")[:-3]
         info.update(status="trained", cv_accuracy=round(correct / len(y), 3),
-                    cv_brier=round(brier / len(y), 3))
+                    cv_brier=round(brier / len(y), 3), version=version)
         self.info = info
-        with open(self.path, "w", encoding="utf-8") as handle:
-            json.dump({"weights": self.weights.tolist(), "info": info,
-                       "features": list(NUMERIC) + [f"label={l}" for l in LABELS]}, handle, indent=1)
+        payload = {"weights": self.weights.tolist(), "info": info,
+                   "features": self.feature_names()}
+        for path in (self.path, os.path.join(self.history_dir, version + ".json")):
+            with open(path, "w", encoding="utf-8") as handle:
+                json.dump(payload, handle, indent=1)
         return info
+
+    @staticmethod
+    def feature_names() -> List[str]:
+        return list(NUMERIC) + [f"label={l}" for l in LABELS]
+
+    def coefficients(self) -> List[Tuple[str, float]]:
+        """(feature, weight) of the active model, largest effect first (bias excluded)."""
+        if self.weights is None:
+            return []
+        pairs = list(zip(self.feature_names(), self.weights[:-1].tolist()))
+        return sorted(pairs, key=lambda kv: -abs(kv[1]))
+
+    def history(self) -> List[Dict[str, object]]:
+        """Every saved training run, newest first, with ``active`` marked."""
+        runs = []
+        for path in glob.glob(os.path.join(self.history_dir, "v*.json")):
+            try:
+                with open(path, encoding="utf-8") as handle:
+                    info = json.load(handle).get("info", {})
+            except (OSError, ValueError):
+                continue
+            info = dict(info, active=info.get("version") == self.info.get("version"))
+            runs.append(info)
+        return sorted(runs, key=lambda r: r.get("version", ""), reverse=True)
+
+    def activate(self, version: str) -> Dict[str, object]:
+        """Make an earlier training run the active model (rollback)."""
+        source = os.path.join(self.history_dir, version + ".json")
+        with open(source, encoding="utf-8") as handle:
+            payload = json.load(handle)
+        with open(self.path, "w", encoding="utf-8") as handle:
+            json.dump(payload, handle, indent=1)
+        self.load()
+        return self.info
+
+    def reset(self) -> None:
+        """Deactivate the learned model (versions are kept)."""
+        if os.path.isfile(self.path):
+            os.remove(self.path)
+        self.weights, self.info = None, {}
 
     def predict(self, finding: Dict[str, object], quality_score: float, view: str) -> Optional[float]:
         if not self.ready:

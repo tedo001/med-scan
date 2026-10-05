@@ -353,7 +353,7 @@ class HBarChart(Chart):
             p.drawRect(QRectF(left, y + row_h * 0.25, max(1.0, width), row_h * 0.5))
             p.setPen(QColor(G[800]))
             p.setFont(self._font(8, mono=True, bold=True))
-            text = f"{value:.0%}" if self.percent else (f"{value:g}" if value < 1000 else f"{value:.0f}")
+            text = f"{value:.0%}" if self.percent else (f"{value:.3g}" if value < 1000 else f"{value:.0f}")
             p.drawText(QRectF(left + width + 6, y, right + 40, row_h), Qt.AlignmentFlag.AlignVCenter,
                        text)
         p.end()
