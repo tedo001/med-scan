@@ -197,7 +197,11 @@ class AnalysisEngine:
         work = imaging.standardise(scan.pixels)
         anatomy = anatomy_mod.segment(work)
         learned_masks = None
-        if self.engine_name == "hybrid" and screening.deep_available():
+        # learned segmentation is a fallback, not a replacement: on images the classical
+        # method handles it can disagree badly (e.g. synthetic phantoms, out of its
+        # training distribution), so it is used only when classical segmentation fails
+        if self.engine_name == "hybrid" and screening.deep_available() and \
+                not anatomy_mod.plausible(anatomy):
             segmenter = screening.get_segmenter()
             if segmenter is not None:
                 learned_masks = segmenter.masks(work)

@@ -394,7 +394,7 @@ class ReviewPage(QWidget):
         row = QHBoxLayout(bar)
         row.setContentsMargins(14, 10, 14, 10)
         row.addWidget(label("HUMAN DECISION", "SectionLabel"))
-        self.decision_note = label("", "Small")
+        self.decision_note = label("", "Small", wrap=True)   # wraps so the bar never widens the window
         row.addWidget(self.decision_note, 1)
         self.second = button("Request second read", "", self._second_read)
         self.add_button = button("+ Add missed finding ▾", "")

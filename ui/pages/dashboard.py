@@ -35,16 +35,14 @@ class DashboardPage(Page):
         self.services = services
         self.rows: List[Dict[str, object]] = []
         self.data: Dict[str, dict] = {}
-        self.updated = label("", "PageCaption")
-        self.add_action(self.updated)
         self.period = Segmented(list(PERIODS), "Last 90 days")
         self.period.changed.connect(lambda _: self.refresh())
         self.add_action(self.period)
         self.site = QComboBox()
-        self.site.setMinimumWidth(150)
+        self.site.setMinimumWidth(120)
         self.site.currentIndexChanged.connect(lambda _: self._filters_changed())
         self.finding = QComboBox()
-        self.finding.setMinimumWidth(150)
+        self.finding.setMinimumWidth(120)
         self.finding.addItems(["All findings"] + list(LABELS))
         self.finding.currentIndexChanged.connect(lambda _: self._filters_changed())
         self.add_action(self.site)
@@ -181,8 +179,7 @@ class DashboardPage(Page):
         days = PERIODS[self.period.value]
         start = (datetime.now() - timedelta(days=days)).strftime("%d %b %Y")
         self.caption.setText(f"{self.period.value} ({start} – {datetime.now():%d %b %Y}) · "
-                             f"{len(self.rows)} studies · engine assessments")
-        self.updated.setText(f"Updated {datetime.now():%d %b %Y, %H:%M}")
+                             f"{len(self.rows)} studies · updated {datetime.now():%d %b %Y, %H:%M}")
         self._stats()
         self._trend()
         self._profile()

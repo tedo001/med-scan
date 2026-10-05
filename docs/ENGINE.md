@@ -212,7 +212,7 @@ problem statement.
 | Recommendations (deliverable) | `msx/recommend.py` | Urgency tier (Now / Same day / Within 1 week / Routine), next test, follow-up and referral. Adjusted for confidence (low → "confirm before acting"), nodule size (Fleischner bands), context (Emergency brings items forward) and **patterns across findings** (cardiomegaly + effusion → one heart-failure work-up) |
 | Generative AI (deliverable) | `msx/report.py` | A draft report (EXAMINATION / TECHNIQUE / FINDINGS / IMPRESSION / RECOMMENDATIONS) that the doctor edits and signs. A local LLM writes the prose when available; output is fact-checked against the findings; a grounded template is the fallback |
 | Machine learning (deliverable) and learning from doctors | `msx/learner.py` | A logistic-regression stacker trained on every finding's eventual verdict: ground truth, Accept / Reject / Correct, or Add (an AI miss). 5-fold cross-validated, blended into each finding with weight `min(0.5, n/200)`, retrained after every sign-off |
-| Robust anatomy on real films | `msx/screening.py` `LungSegmenter` | TorchXRayVision **PSPNet** lung and heart segmentation in hybrid mode, with a plausibility check and classical fallback. The test-time-augmentation copies reuse the warped masks |
+| Robust anatomy on real films | `msx/screening.py` `LungSegmenter` | TorchXRayVision **PSPNet** lung and heart segmentation, used in hybrid mode as a **fallback** when classical segmentation fails (tightly cropped or post-processed films). The test-time-augmentation copies reuse the warped masks |
 | Test Doctor + AI vs either alone, with *simulations* | `msx/simulation.py` | Simulated readers: 3 skill levels × 3 trust styles (sceptical, calibrated, over-trusting) on the AI's real outputs. Reports accuracy for Doctor alone, AI alone and Doctor + AI, **automation bias** and **rescue rate**, with the AI as measured and degraded to 15 % error |
 | *Reduce* bias, not only monitor it | `msx/bias.py` `mitigate` | Per-subgroup operating thresholds (sex, age band). A threshold is only ever lowered, and only while specificity holds, to close a sensitivity gap. Before / after table on the Evaluation page; the analyser applies the thresholds |
 
@@ -236,17 +236,16 @@ python -m msx.evaluation ~/.medscan/real_samples --engine hybrid
 ```
 
 The set is 50 PA films from the public COVID-19 Image Data Collection: 40
-pneumonia, labelled as consolidation, and 9 no-finding (one film failed to
-download). The images are not redistributed. The full report is in
+pneumonia, labelled as consolidation, and 10 no-finding. The images are not redistributed. The full report is in
 `docs/real_eval_hybrid.json`.
 
 | Metric | Value |
 |---|---|
-| Quality gate: films accepted | 49 / 50 |
+| Quality gate: films accepted | 50 / 50 |
 | Consolidation (pneumonia) sensitivity | **0.80** |
-| Consolidation specificity | 0.44 (only 9 normal films) |
-| Consolidation AUC | 0.74 |
-| Adaptive vs fixed | 28 % fewer modules, 22 % fewer model calls; sensitivity −0.025 |
+| Consolidation specificity | 0.50 (only 10 normal films) |
+| Consolidation AUC | **0.82** |
+| Adaptive vs fixed | 25 % fewer modules, 20 % fewer model calls; no change in sensitivity or specificity |
 
 This is a small, imbalanced convenience set, so it is a sanity check, not
 validation. Specificity is the weak point: published journal figures are often

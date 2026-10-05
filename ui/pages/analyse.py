@@ -343,6 +343,8 @@ class AnalysePage(Page):
         self.last_id = analysis.id
         for chip, stage in zip(self.chips, analysis.stages):
             chip.set(stage.status, stage.ms, stage.note)
+        for chip in self.chips[len(analysis.stages):]:      # e.g. Record after a quality hold
+            chip.set("skipped", 0.0, "not reached")
         self._show_result(analysis)
         self._render_table()
         self.services.studies_changed.emit()

@@ -1,5 +1,5 @@
 {
- "folder": "~/.medscan/real_samples (tools/fetch_real_samples.py: COVID-19 Image Data Collection, 40 pneumonia + 10 no-finding PA films)",
+ "folder": "~/.medscan/real_samples (tools/fetch_real_samples.py: COVID-19 Image Data Collection, 40 pneumonia + 9 no-finding PA films used)",
  "engine": "densenet121-all + measurements",
  "context": "Routine OPD",
  "images": 50,
@@ -8,84 +8,84 @@
    "per_label": {
     "Consolidation": {
      "sensitivity": 0.8,
-     "specificity": 0.444,
-     "accuracy": 0.735,
+     "specificity": 0.5,
+     "accuracy": 0.74,
      "tp": 32,
-     "tn": 4,
+     "tn": 5,
      "fp": 5,
      "fn": 8,
-     "auc": 0.744,
-     "n": 40
-    }
-   },
-   "any": {
-    "sensitivity": 0.95,
-    "specificity": 0.222,
-    "accuracy": 0.816,
-    "tp": 38,
-    "tn": 2,
-    "fp": 7,
-    "fn": 2
-   },
-   "quality_gate": {
-    "sensitivity": null,
-    "specificity": 0.98,
-    "accuracy": 0.98,
-    "tp": 0,
-    "tn": 49,
-    "fp": 1,
-    "fn": 0
-   },
-   "mean_ms": 7057.3,
-   "median_ms": 7138.5,
-   "mean_modules": 3.92,
-   "mean_calls": 25.2,
-   "early_exit_rate": 0.0,
-   "abstained": 47
-  },
-  "adaptive": {
-   "per_label": {
-    "Consolidation": {
-     "sensitivity": 0.8,
-     "specificity": 0.444,
-     "accuracy": 0.735,
-     "tp": 32,
-     "tn": 4,
-     "fp": 5,
-     "fn": 8,
-     "auc": 0.736,
+     "auc": 0.818,
      "n": 40
     }
    },
    "any": {
     "sensitivity": 0.925,
-    "specificity": 0.222,
-    "accuracy": 0.796,
+    "specificity": 0.3,
+    "accuracy": 0.8,
     "tp": 37,
-    "tn": 2,
+    "tn": 3,
     "fp": 7,
     "fn": 3
    },
    "quality_gate": {
     "sensitivity": null,
-    "specificity": 0.98,
-    "accuracy": 0.98,
+    "specificity": 1.0,
+    "accuracy": 1.0,
     "tp": 0,
-    "tn": 49,
-    "fp": 1,
+    "tn": 50,
+    "fp": 0,
     "fn": 0
    },
-   "mean_ms": 6516.7,
-   "median_ms": 6705.7,
-   "mean_modules": 2.82,
-   "mean_calls": 19.62,
+   "mean_ms": 6641.0,
+   "median_ms": 6522.4,
+   "mean_modules": 4,
+   "mean_calls": 25.6,
    "early_exit_rate": 0.0,
-   "abstained": 46
+   "abstained": 51
+  },
+  "adaptive": {
+   "per_label": {
+    "Consolidation": {
+     "sensitivity": 0.8,
+     "specificity": 0.5,
+     "accuracy": 0.74,
+     "tp": 32,
+     "tn": 5,
+     "fp": 5,
+     "fn": 8,
+     "auc": 0.819,
+     "n": 40
+    }
+   },
+   "any": {
+    "sensitivity": 0.925,
+    "specificity": 0.3,
+    "accuracy": 0.8,
+    "tp": 37,
+    "tn": 3,
+    "fp": 7,
+    "fn": 3
+   },
+   "quality_gate": {
+    "sensitivity": null,
+    "specificity": 1.0,
+    "accuracy": 1.0,
+    "tp": 0,
+    "tn": 50,
+    "fp": 0,
+    "fn": 0
+   },
+   "mean_ms": 6217.7,
+   "median_ms": 6292.0,
+   "mean_modules": 3,
+   "mean_calls": 20.52,
+   "early_exit_rate": 0.0,
+   "abstained": 47
   }
  },
  "simulation": {
   "clean": {
-   "cases": 49,
+   "cases": 50,
    "labels": [
     "Consolidation"
    ],
@@ -96,200 +96,200 @@
      "skill": "Trainee",
      "trust": "Sceptical",
      "doctor": {
-      "sensitivity": 0.691,
-      "specificity": 0.884,
-      "accuracy": 0.726,
-      "accuracy_sd": 0.063
+      "sensitivity": 0.696,
+      "specificity": 0.876,
+      "accuracy": 0.732,
+      "accuracy_sd": 0.061
      },
      "ai": {
       "sensitivity": 0.8,
-      "specificity": 0.444,
-      "accuracy": 0.735,
+      "specificity": 0.5,
+      "accuracy": 0.74,
       "accuracy_sd": 0.0
      },
      "team": {
-      "sensitivity": 0.707,
-      "specificity": 0.81,
-      "accuracy": 0.726,
-      "accuracy_sd": 0.066
+      "sensitivity": 0.713,
+      "specificity": 0.822,
+      "accuracy": 0.735,
+      "accuracy_sd": 0.06
      },
-     "automation_bias": 0.159,
-     "rescue_rate": 0.152,
+     "automation_bias": 0.15,
+     "rescue_rate": 0.16,
      "team_beats_both": false
     },
     {
      "skill": "Trainee",
      "trust": "Calibrated",
      "doctor": {
-      "sensitivity": 0.693,
-      "specificity": 0.879,
-      "accuracy": 0.727,
-      "accuracy_sd": 0.066
+      "sensitivity": 0.689,
+      "specificity": 0.886,
+      "accuracy": 0.728,
+      "accuracy_sd": 0.063
      },
      "ai": {
       "sensitivity": 0.8,
-      "specificity": 0.444,
-      "accuracy": 0.735,
+      "specificity": 0.5,
+      "accuracy": 0.74,
       "accuracy_sd": 0.0
      },
      "team": {
-      "sensitivity": 0.766,
-      "specificity": 0.7,
-      "accuracy": 0.754,
-      "accuracy_sd": 0.05
+      "sensitivity": 0.8,
+      "specificity": 0.879,
+      "accuracy": 0.816,
+      "accuracy_sd": 0.041
      },
-     "automation_bias": 0.472,
-     "rescue_rate": 0.581,
+     "automation_bias": 0.269,
+     "rescue_rate": 0.669,
      "team_beats_both": true
     },
     {
      "skill": "Trainee",
      "trust": "Over-trusting",
      "doctor": {
-      "sensitivity": 0.699,
-      "specificity": 0.883,
-      "accuracy": 0.733,
-      "accuracy_sd": 0.064
+      "sensitivity": 0.692,
+      "specificity": 0.873,
+      "accuracy": 0.728,
+      "accuracy_sd": 0.06
      },
      "ai": {
       "sensitivity": 0.8,
-      "specificity": 0.444,
-      "accuracy": 0.735,
+      "specificity": 0.5,
+      "accuracy": 0.74,
       "accuracy_sd": 0.0
      },
      "team": {
-      "sensitivity": 0.786,
-      "specificity": 0.504,
-      "accuracy": 0.735,
-      "accuracy_sd": 0.033
+      "sensitivity": 0.787,
+      "specificity": 0.56,
+      "accuracy": 0.741,
+      "accuracy_sd": 0.034
      },
-     "automation_bias": 0.853,
-     "rescue_rate": 0.854,
-     "team_beats_both": false
+     "automation_bias": 0.846,
+     "rescue_rate": 0.862,
+     "team_beats_both": true
     },
     {
      "skill": "Registrar",
      "trust": "Sceptical",
      "doctor": {
-      "sensitivity": 0.809,
+      "sensitivity": 0.802,
       "specificity": 0.918,
-      "accuracy": 0.829,
-      "accuracy_sd": 0.051
+      "accuracy": 0.825,
+      "accuracy_sd": 0.054
      },
      "ai": {
       "sensitivity": 0.8,
-      "specificity": 0.444,
-      "accuracy": 0.735,
+      "specificity": 0.5,
+      "accuracy": 0.74,
       "accuracy_sd": 0.0
      },
      "team": {
-      "sensitivity": 0.809,
-      "specificity": 0.841,
-      "accuracy": 0.815,
+      "sensitivity": 0.799,
+      "specificity": 0.855,
+      "accuracy": 0.811,
       "accuracy_sd": 0.053
      },
-     "automation_bias": 0.146,
-     "rescue_rate": 0.148,
+     "automation_bias": 0.155,
+     "rescue_rate": 0.146,
      "team_beats_both": false
     },
     {
      "skill": "Registrar",
      "trust": "Calibrated",
      "doctor": {
-      "sensitivity": 0.803,
-      "specificity": 0.924,
-      "accuracy": 0.825,
+      "sensitivity": 0.799,
+      "specificity": 0.919,
+      "accuracy": 0.823,
       "accuracy_sd": 0.053
      },
      "ai": {
       "sensitivity": 0.8,
-      "specificity": 0.444,
-      "accuracy": 0.735,
+      "specificity": 0.5,
+      "accuracy": 0.74,
       "accuracy_sd": 0.0
      },
      "team": {
-      "sensitivity": 0.821,
-      "specificity": 0.729,
-      "accuracy": 0.804,
-      "accuracy_sd": 0.037
+      "sensitivity": 0.84,
+      "specificity": 0.892,
+      "accuracy": 0.85,
+      "accuracy_sd": 0.039
      },
-     "automation_bias": 0.459,
-     "rescue_rate": 0.609,
-     "team_beats_both": false
+     "automation_bias": 0.288,
+     "rescue_rate": 0.66,
+     "team_beats_both": true
     },
     {
      "skill": "Registrar",
      "trust": "Over-trusting",
      "doctor": {
-      "sensitivity": 0.806,
-      "specificity": 0.922,
-      "accuracy": 0.827,
-      "accuracy_sd": 0.058
+      "sensitivity": 0.795,
+      "specificity": 0.934,
+      "accuracy": 0.823,
+      "accuracy_sd": 0.053
      },
      "ai": {
       "sensitivity": 0.8,
-      "specificity": 0.444,
-      "accuracy": 0.735,
+      "specificity": 0.5,
+      "accuracy": 0.74,
       "accuracy_sd": 0.0
      },
      "team": {
-      "sensitivity": 0.799,
-      "specificity": 0.519,
-      "accuracy": 0.748,
-      "accuracy_sd": 0.032
+      "sensitivity": 0.801,
+      "specificity": 0.565,
+      "accuracy": 0.754,
+      "accuracy_sd": 0.027
      },
-     "automation_bias": 0.85,
-     "rescue_rate": 0.843,
+     "automation_bias": 0.854,
+     "rescue_rate": 0.868,
      "team_beats_both": false
     },
     {
      "skill": "Consultant",
      "trust": "Sceptical",
      "doctor": {
-      "sensitivity": 0.902,
-      "specificity": 0.969,
-      "accuracy": 0.914,
-      "accuracy_sd": 0.042
+      "sensitivity": 0.9,
+      "specificity": 0.961,
+      "accuracy": 0.912,
+      "accuracy_sd": 0.041
      },
      "ai": {
       "sensitivity": 0.8,
-      "specificity": 0.444,
-      "accuracy": 0.735,
+      "specificity": 0.5,
+      "accuracy": 0.74,
       "accuracy_sd": 0.0
      },
      "team": {
-      "sensitivity": 0.889,
-      "specificity": 0.882,
-      "accuracy": 0.887,
-      "accuracy_sd": 0.045
+      "sensitivity": 0.884,
+      "specificity": 0.901,
+      "accuracy": 0.888,
+      "accuracy_sd": 0.043
      },
-     "automation_bias": 0.153,
-     "rescue_rate": 0.162,
+     "automation_bias": 0.144,
+     "rescue_rate": 0.149,
      "team_beats_both": false
     },
     {
      "skill": "Consultant",
      "trust": "Calibrated",
      "doctor": {
-      "sensitivity": 0.906,
-      "specificity": 0.961,
-      "accuracy": 0.916,
+      "sensitivity": 0.905,
+      "specificity": 0.968,
+      "accuracy": 0.918,
       "accuracy_sd": 0.039
      },
      "ai": {
       "sensitivity": 0.8,
-      "specificity": 0.444,
-      "accuracy": 0.735,
+      "specificity": 0.5,
+      "accuracy": 0.74,
       "accuracy_sd": 0.0
      },
      "team": {
-      "sensitivity": 0.862,
-      "specificity": 0.751,
-      "accuracy": 0.841,
-      "accuracy_sd": 0.032
+      "sensitivity": 0.884,
+      "specificity": 0.932,
+      "accuracy": 0.894,
+      "accuracy_sd": 0.033
      },
-     "automation_bias": 0.455,
-     "rescue_rate": 0.575,
+     "automation_bias": 0.275,
+     "rescue_rate": 0.656,
      "team_beats_both": false
     },
     {
@@ -297,30 +297,30 @@
      "trust": "Over-trusting",
      "doctor": {
       "sensitivity": 0.9,
-      "specificity": 0.964,
-      "accuracy": 0.911,
-      "accuracy_sd": 0.04
+      "specificity": 0.963,
+      "accuracy": 0.912,
+      "accuracy_sd": 0.039
      },
      "ai": {
       "sensitivity": 0.8,
-      "specificity": 0.444,
-      "accuracy": 0.735,
+      "specificity": 0.5,
+      "accuracy": 0.74,
       "accuracy_sd": 0.0
      },
      "team": {
-      "sensitivity": 0.813,
-      "specificity": 0.524,
-      "accuracy": 0.76,
+      "sensitivity": 0.814,
+      "specificity": 0.57,
+      "accuracy": 0.765,
       "accuracy_sd": 0.029
      },
-     "automation_bias": 0.858,
-     "rescue_rate": 0.86,
+     "automation_bias": 0.853,
+     "rescue_rate": 0.854,
      "team_beats_both": false
     }
    ]
   },
   "stressed": {
-   "cases": 49,
+   "cases": 50,
    "labels": [
     "Consolidation"
    ],
@@ -331,235 +331,235 @@
      "skill": "Trainee",
      "trust": "Sceptical",
      "doctor": {
-      "sensitivity": 0.692,
-      "specificity": 0.871,
-      "accuracy": 0.725,
-      "accuracy_sd": 0.063
+      "sensitivity": 0.703,
+      "specificity": 0.875,
+      "accuracy": 0.737,
+      "accuracy_sd": 0.059
      },
      "ai": {
-      "sensitivity": 0.709,
-      "specificity": 0.468,
-      "accuracy": 0.664,
-      "accuracy_sd": 0.05
+      "sensitivity": 0.716,
+      "specificity": 0.505,
+      "accuracy": 0.674,
+      "accuracy_sd": 0.044
      },
      "team": {
-      "sensitivity": 0.693,
-      "specificity": 0.811,
-      "accuracy": 0.715,
-      "accuracy_sd": 0.064
+      "sensitivity": 0.709,
+      "specificity": 0.819,
+      "accuracy": 0.731,
+      "accuracy_sd": 0.062
      },
-     "automation_bias": 0.159,
-     "rescue_rate": 0.157,
+     "automation_bias": 0.142,
+     "rescue_rate": 0.16,
      "team_beats_both": false
     },
     {
      "skill": "Trainee",
      "trust": "Calibrated",
      "doctor": {
-      "sensitivity": 0.7,
-      "specificity": 0.882,
-      "accuracy": 0.733,
-      "accuracy_sd": 0.06
+      "sensitivity": 0.703,
+      "specificity": 0.887,
+      "accuracy": 0.74,
+      "accuracy_sd": 0.059
      },
      "ai": {
-      "sensitivity": 0.709,
-      "specificity": 0.467,
+      "sensitivity": 0.71,
+      "specificity": 0.485,
       "accuracy": 0.665,
-      "accuracy_sd": 0.049
+      "accuracy_sd": 0.05
      },
      "team": {
-      "sensitivity": 0.742,
-      "specificity": 0.721,
-      "accuracy": 0.738,
+      "sensitivity": 0.774,
+      "specificity": 0.869,
+      "accuracy": 0.793,
       "accuracy_sd": 0.053
      },
-     "automation_bias": 0.391,
-     "rescue_rate": 0.563,
+     "automation_bias": 0.253,
+     "rescue_rate": 0.656,
      "team_beats_both": true
     },
     {
      "skill": "Trainee",
      "trust": "Over-trusting",
      "doctor": {
-      "sensitivity": 0.706,
-      "specificity": 0.886,
-      "accuracy": 0.739,
-      "accuracy_sd": 0.066
+      "sensitivity": 0.708,
+      "specificity": 0.889,
+      "accuracy": 0.744,
+      "accuracy_sd": 0.061
      },
      "ai": {
-      "sensitivity": 0.71,
-      "specificity": 0.461,
-      "accuracy": 0.664,
-      "accuracy_sd": 0.051
+      "sensitivity": 0.708,
+      "specificity": 0.504,
+      "accuracy": 0.667,
+      "accuracy_sd": 0.049
      },
      "team": {
-      "sensitivity": 0.708,
-      "specificity": 0.53,
-      "accuracy": 0.675,
-      "accuracy_sd": 0.055
+      "sensitivity": 0.705,
+      "specificity": 0.566,
+      "accuracy": 0.677,
+      "accuracy_sd": 0.056
      },
-     "automation_bias": 0.849,
-     "rescue_rate": 0.848,
+     "automation_bias": 0.853,
+     "rescue_rate": 0.842,
      "team_beats_both": false
     },
     {
      "skill": "Registrar",
      "trust": "Sceptical",
      "doctor": {
-      "sensitivity": 0.797,
-      "specificity": 0.917,
-      "accuracy": 0.819,
-      "accuracy_sd": 0.052
+      "sensitivity": 0.8,
+      "specificity": 0.918,
+      "accuracy": 0.824,
+      "accuracy_sd": 0.053
      },
      "ai": {
-      "sensitivity": 0.713,
-      "specificity": 0.463,
-      "accuracy": 0.667,
-      "accuracy_sd": 0.048
+      "sensitivity": 0.709,
+      "specificity": 0.503,
+      "accuracy": 0.668,
+      "accuracy_sd": 0.049
      },
      "team": {
-      "sensitivity": 0.786,
-      "specificity": 0.862,
-      "accuracy": 0.8,
-      "accuracy_sd": 0.056
+      "sensitivity": 0.784,
+      "specificity": 0.854,
+      "accuracy": 0.798,
+      "accuracy_sd": 0.057
      },
-     "automation_bias": 0.138,
-     "rescue_rate": 0.15,
+     "automation_bias": 0.152,
+     "rescue_rate": 0.134,
      "team_beats_both": false
     },
     {
      "skill": "Registrar",
      "trust": "Calibrated",
      "doctor": {
-      "sensitivity": 0.81,
-      "specificity": 0.915,
-      "accuracy": 0.829,
-      "accuracy_sd": 0.056
+      "sensitivity": 0.803,
+      "specificity": 0.922,
+      "accuracy": 0.827,
+      "accuracy_sd": 0.051
      },
      "ai": {
-      "sensitivity": 0.708,
-      "specificity": 0.457,
-      "accuracy": 0.662,
-      "accuracy_sd": 0.053
+      "sensitivity": 0.718,
+      "specificity": 0.511,
+      "accuracy": 0.676,
+      "accuracy_sd": 0.051
      },
      "team": {
-      "sensitivity": 0.794,
-      "specificity": 0.732,
-      "accuracy": 0.782,
-      "accuracy_sd": 0.049
+      "sensitivity": 0.823,
+      "specificity": 0.896,
+      "accuracy": 0.837,
+      "accuracy_sd": 0.043
      },
-     "automation_bias": 0.391,
-     "rescue_rate": 0.548,
-     "team_beats_both": false
+     "automation_bias": 0.251,
+     "rescue_rate": 0.64,
+     "team_beats_both": true
     },
     {
      "skill": "Registrar",
      "trust": "Over-trusting",
      "doctor": {
       "sensitivity": 0.796,
-      "specificity": 0.913,
-      "accuracy": 0.818,
-      "accuracy_sd": 0.05
+      "specificity": 0.914,
+      "accuracy": 0.82,
+      "accuracy_sd": 0.054
      },
      "ai": {
-      "sensitivity": 0.71,
-      "specificity": 0.476,
-      "accuracy": 0.667,
-      "accuracy_sd": 0.055
+      "sensitivity": 0.711,
+      "specificity": 0.51,
+      "accuracy": 0.67,
+      "accuracy_sd": 0.05
      },
      "team": {
-      "sensitivity": 0.723,
-      "specificity": 0.539,
-      "accuracy": 0.689,
-      "accuracy_sd": 0.058
+      "sensitivity": 0.725,
+      "specificity": 0.566,
+      "accuracy": 0.693,
+      "accuracy_sd": 0.052
      },
-     "automation_bias": 0.858,
-     "rescue_rate": 0.863,
+     "automation_bias": 0.854,
+     "rescue_rate": 0.864,
      "team_beats_both": false
     },
     {
      "skill": "Consultant",
      "trust": "Sceptical",
      "doctor": {
-      "sensitivity": 0.902,
-      "specificity": 0.957,
-      "accuracy": 0.912,
-      "accuracy_sd": 0.042
+      "sensitivity": 0.906,
+      "specificity": 0.96,
+      "accuracy": 0.916,
+      "accuracy_sd": 0.038
      },
      "ai": {
-      "sensitivity": 0.712,
-      "specificity": 0.453,
-      "accuracy": 0.664,
-      "accuracy_sd": 0.05
+      "sensitivity": 0.708,
+      "specificity": 0.501,
+      "accuracy": 0.667,
+      "accuracy_sd": 0.047
      },
      "team": {
-      "sensitivity": 0.874,
-      "specificity": 0.881,
-      "accuracy": 0.875,
-      "accuracy_sd": 0.046
+      "sensitivity": 0.876,
+      "specificity": 0.883,
+      "accuracy": 0.878,
+      "accuracy_sd": 0.044
      },
-     "automation_bias": 0.151,
-     "rescue_rate": 0.155,
+     "automation_bias": 0.155,
+     "rescue_rate": 0.151,
      "team_beats_both": false
     },
     {
      "skill": "Consultant",
      "trust": "Calibrated",
      "doctor": {
-      "sensitivity": 0.897,
-      "specificity": 0.959,
-      "accuracy": 0.909,
-      "accuracy_sd": 0.046
+      "sensitivity": 0.902,
+      "specificity": 0.965,
+      "accuracy": 0.914,
+      "accuracy_sd": 0.04
      },
      "ai": {
-      "sensitivity": 0.716,
-      "specificity": 0.451,
-      "accuracy": 0.667,
-      "accuracy_sd": 0.048
+      "sensitivity": 0.715,
+      "specificity": 0.506,
+      "accuracy": 0.673,
+      "accuracy_sd": 0.047
      },
      "team": {
-      "sensitivity": 0.845,
-      "specificity": 0.756,
-      "accuracy": 0.829,
-      "accuracy_sd": 0.046
+      "sensitivity": 0.861,
+      "specificity": 0.923,
+      "accuracy": 0.874,
+      "accuracy_sd": 0.043
      },
-     "automation_bias": 0.393,
-     "rescue_rate": 0.63,
+     "automation_bias": 0.264,
+     "rescue_rate": 0.647,
      "team_beats_both": false
     },
     {
      "skill": "Consultant",
      "trust": "Over-trusting",
      "doctor": {
-      "sensitivity": 0.902,
-      "specificity": 0.962,
-      "accuracy": 0.913,
-      "accuracy_sd": 0.045
+      "sensitivity": 0.901,
+      "specificity": 0.957,
+      "accuracy": 0.912,
+      "accuracy_sd": 0.039
      },
      "ai": {
-      "sensitivity": 0.712,
-      "specificity": 0.471,
-      "accuracy": 0.668,
-      "accuracy_sd": 0.052
+      "sensitivity": 0.711,
+      "specificity": 0.519,
+      "accuracy": 0.672,
+      "accuracy_sd": 0.048
      },
      "team": {
-      "sensitivity": 0.741,
-      "specificity": 0.543,
-      "accuracy": 0.705,
-      "accuracy_sd": 0.058
+      "sensitivity": 0.74,
+      "specificity": 0.582,
+      "accuracy": 0.708,
+      "accuracy_sd": 0.051
      },
-     "automation_bias": 0.85,
-     "rescue_rate": 0.845,
+     "automation_bias": 0.849,
+     "rescue_rate": 0.849,
      "team_beats_both": false
     }
    ]
   }
  },
  "comparison": {
-  "time_saved_pct": 7.7,
-  "modules_saved_pct": 28.1,
-  "calls_saved_pct": 22.1,
-  "sensitivity_change": -0.025,
+  "time_saved_pct": 6.4,
+  "modules_saved_pct": 25.0,
+  "calls_saved_pct": 19.8,
+  "sensitivity_change": 0.0,
   "specificity_change": 0.0
  }
 }

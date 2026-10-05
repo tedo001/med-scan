@@ -269,8 +269,10 @@ class LungSegmenter:
 
     Classical thresholding fails on tightly cropped, scanned or post-processed
     films where the lungs merge with the image edge. The learned segmenter does
-    not, so the hybrid engine uses it first and falls back to the classical
-    method when its masks are implausible (e.g. on synthetic phantoms).
+    not, so the hybrid engine falls back to it when classical segmentation
+    fails; it is not used where the classical masks are plausible, because on
+    out-of-distribution images (e.g. synthetic phantoms) its masks can look
+    plausible yet be wrong.
     """
 
     name = "PSPNet (TorchXRayVision, ChestX-Det)"

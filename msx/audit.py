@@ -139,6 +139,8 @@ class AuditLog:
             writer.writerow(["at", "category", "action", "actor", "role", "study", "detail",
                              "hash"])
             for e in rows:
-                writer.writerow([e["at"], e["category"], e["action"], e["actor"], e["role"],
-                                 e.get("study", ""), json.dumps(e.get("detail", {})), e["hash"]])
+                # .get throughout: a damaged trail is exactly what an auditor needs to export
+                writer.writerow([e.get("at", ""), e.get("category", ""), e.get("action", ""),
+                                 e.get("actor", ""), e.get("role", ""), e.get("study", ""),
+                                 json.dumps(e.get("detail", {})), e.get("hash", "")])
         return len(rows)

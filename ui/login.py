@@ -113,6 +113,10 @@ class LoginDialog(QDialog):
         inner.addWidget(self.error)
         self.submit = button("Sign in to Clinical Workspace", "LoginPrimary", self._sign_in)
         self.submit.setDefault(True)
+        # Enter in either field signs in (the default-button route is lost once another
+        # button in the dialog has taken focus)
+        self.username.returnPressed.connect(self._sign_in)
+        self.password.returnPressed.connect(self._sign_in)
         inner.addWidget(self.submit)
         inner.addSpacing(10)
 
@@ -167,6 +171,8 @@ class LoginDialog(QDialog):
         self.password.setText(demo[1])
 
     def _sign_in(self) -> None:
+        if self.result() == QDialog.DialogCode.Accepted:   # Enter and the default button both fired
+            return
         try:
             self.account = self.accounts.authenticate(self.username.text(), self.password.text(),
                                                       self.role)
